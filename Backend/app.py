@@ -1,147 +1,116 @@
 from flask import Flask,request,jsonify
-from matplotlib import pyplot as plt
+from flask_cors import CORS
+
+from audio_utils import load_audio, downsample_for_preview, AudioLoadError
+from dsp import energy_decay, get_fft, all_octave_bands
+
 import numpy as np
-from scipy.integrate import cumulative_trapezoid
-import scipy.signal
-import librosa
-import math
-from scipy.fft import fft,fftfreq
+
 
 
 app=Flask(__name__)
+CORS(app)
 
-
-#applicable bandwidths
-bdw=[125,250,500,1000,2000,4000]
+PREVIEW_POINTS = 2000
 
 #helper functions
 
-#calculates energy decay
-def energy_decay(impulse_response:np.ndarray,sampling_rate)->np.ndarray:
-    impulse_response=impulse_response**2
-    dt=1/sampling_rate
+def get_uploaded_audio():
+    if "audio" not in request.files:
+        raise AudioLoadError("No audio file was uploaded (expected form field 'audio'.)")
 
-    impulse_response_rev=impulse_response[::-1]
+    file = request.files["audio"]
+    if file.filename=="":
+        raise AudioLoadError("No file was selected.")
 
-    energy_signal=cumulative_trapezoid(impulse_response_rev,dx=-dt,initial=0)[::-1]
-
-    #Convert a power or amplitude ratio to decibels and back. 
-    # Decibels use a logarithmic scale: dB = 10·log₁₀(P/P₀) for power, or 20·log₁₀(A/A₀) for amplitude.
-    
-    #default base is 10
-    return 20*np.log(energy_signal/np.max(energy_signal))
-
-#octave-band filtering
-def octave_band(impulse_response:np.ndarray,sample_rate,bandwidth):
-    fl=bandwidth/math.sqrt(2)
-    fh=bandwidth*math.sqrt(2)
-    return bandpass(impulse_response,[fl,fh],sample_rate)
-
-
-def bandpass(data:np.ndarray,edges:list[float],sample_rate,poles:int=5):
-    sos=scipy.signal.butter(poles,edges,'bandpass',fs=sample_rate,output='sos')
-    filtered_data=scipy.signal.sosfiltfilt(sos,data)
-    return filtered_data
-
-
-#Fourier transform
-def get_fft(signal:np.ndarray,sample_rate):
-
-    time_interval=1/sample_rate
-    fft_result=fft(signal)
-
-    frequencies=fftfreq(len(signal),time_interval)
-
-    return (np.abs(fft_result),frequencies)
-
-
-
-
-
-#Setting up the default route
+    return load_audio(file)
 
 @app.route('/')
 def index():
-    return "Hello world"
+    return jsonify({
+        "status": "ok",
+        "service": "Resona backend",
+        "endpoints": ["/upload","/energydecay","/fft"],
+    })
 
-#sending a wav file to backend and recieve info back
 
-@app.route('/upload',methods=['POST','GET'])
+@app.route('/upload',methods=['POST'])
 def upload():
-    if 'audio' not in request.files:
-        return jsonify({"error" : "No audio file was uploaded",}), 400
+    try:
+        signal, sample_rate = get_uploaded_audio()
+    except AudioLoadError as e:
+        return jsonify({"error": str(e)}), 400
 
-    file=request.files['audio']
+    n_samples = len(signal)
+    time_full =  (np.arange(n_samples)/sample_rate).tolist()
+    preview_time, preview_amplitude = downsample_for_preview(
+        signal, sample_rate, target_points=PREVIEW_POINTS
+    )
 
-    if file.filename=='':
-        return jsonify({"error":"File was not found",}),404
-
-
-    impulse_response,sample_rate=librosa.load(file,sr=None,mono=False)
-
-    #Returns
-    #    -------
-    #   y : np.ndarray [shape=(n,) or (..., n)]
-    #        audio time series. Multi-channel is supported.This will be multichannel as I set mono to false. IDK
-    #    sr : number > 0 [scalar]
-    #       sampling rate of ``y``
-
-    #plotting the wave cuz why not
-    #the plot will be in terms of time
-
-    plt.figure(figsize=(10,4))
-
-    librosa.display.waveshow(impulse_response,sample_rate)
-
-    plt.title("Impulse response")
-    plt.xlabel("interval")
-    plt.ylabel("h[n]")
-
-    plt.show()
+    return jsonify({
+        "status": "success",
+        "sampling_rate": sample_rate,
+        "duration_seconds": n_samples/sample_rate,
+        "waveform_full": {
+            "time": time_full,
+            "amplitude": signal.tolist(),
+        },
+        "waveform_preview": {
+            "time": preview_time,
+            "amplitude": preview_amplitude
+        },
+    }), 200
 
 
-
-
-#this is the route for energy decay graph thingy
-
-@app.route('/energydecay',methods=['POST','GET'])
+@app.route('/energydecay',methods=['POST'])
 def energy_curve():
-    if 'audio' not in request.files:
-            return jsonify({"error" : "No audio file was uploaded",}), 400
-    
-    file=request.files['audio']
+    try:
+        signal, sample_rate=get_uploaded_audio()
+        decay_db=energy_decay(signal, sample_rate)
+    except AudioLoadError as e:
+        return jsonify({"error":str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
 
-    if file.filename=='':
-        return jsonify({"error":"File was not found",}),404
+    time = (np.arange(len(decay_db))/ sample_rate).tolist()
+    return jsonify({"status":"success","sampling_rate":sample_rate, "time": time, "decay_db": decay_db.tolist()}),200
+
+@app.route("/octavebands", methods=["POST"])
+def octave_bands_route():
+    try:
+        signal, sample_rate= get_uploaded_audio()
+        bands = all_octave_bands(signal, sample_rate)
+    except AudioLoadError as e:
+        return jsonify({"error": str(e)}), 400
+
+    result = {}
+    for center_freq, filtered_signal in bands.items():
+        try:
+            decay_db = energy_decay(filtered_signal, sample_rate)
+            result[str(center_freq)] = {
+                "time": (np.arange(len(decay_db))/sample_rate).tolist(),
+                "decay_db": decay_db.tolist(),
+            }
+        except ValueError:
+            continue
+    return jsonify({"status": "success", "sampling_rate": sample_rate, "bands":result}), 200
 
 
-    impulse_response,sample_rate=librosa.load(file,sr=None,mono=False)
-
-    energy_response=energy_decay(impulse_response=impulse_response,sampling_rate=sample_rate)
-
-    return jsonify({"status":"success","signal":energy_response.tolist(),"sampling_rate":sample_rate}),200
-
-
-@app.route('/fft',methods=['GET','POST'])
+@app.route('/fft',methods=['POST'])
 def fft_route():
-    if 'audio' not in request.files:
-        return jsonify({"error" : "No audio file was uploaded",}), 400
+    try:
+        signal, sample_rate= get_uploaded_audio()
+    except AudioLoadError as e:
+        return jsonify({"error": str(e)}), 400
     
-    file=request.files['audio']
-
-    if file.filename=='':
-        return jsonify({"error":"File was not found",}),404
-
-
-    impulse_response,sample_rate=librosa.load(file,sr=None,mono=False)
-
-    amp,freq=get_fft(impulse_response,sample_rate)
-
-
-    return jsonify({'amplitude':amp.tolist(),'frequencies':freq.tolist()}),200
-
-
-
+    amp,freq=get_fft(signal,sample_rate)
+    half = len(freq)//2
+    return jsonify({
+        "status": "success",
+        "sampling_rate": sample_rate,
+        "amplitude": amp[:half].tolist(),
+        "frequencies": freq[:half].tolist(),
+    }), 200
 
 if __name__=="__main__":
     app.run(debug=True) 
