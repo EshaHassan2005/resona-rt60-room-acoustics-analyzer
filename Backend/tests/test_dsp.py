@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dsp import energy_decay, bandpass, octave_band, all_octave_bands, get_fft, OCTAVE_BANDS
+from dsp import energy_decay, bandpass, octave_band, all_octave_bands, get_fft, OCTAVE_BANDS, find_onset, extract_impulse_response
 from audio_utils import load_audio, downsample_for_preview, AudioLoadError
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "synthetic_clap.wav")
@@ -17,6 +17,24 @@ def synthetic_signal():
     import soundfile as sf
     signal, sr = sf.read(FIXTURE_PATH)
     return signal.astype(np.float64), sr
+
+@pytest.fixture
+def signal_with_leading_noise():
+    sr = 44100
+    rng = np.random.default_rng(42)
+
+    noise = rng.normal(0, 0.01, int(0.2* sr))
+    true_onset = len(noise)
+
+    clap = np.zeros(1)
+    clap[0] = 1.0
+    tail_len = int(0.5 * sr)
+    t = np.arange(tail_len) / sr
+    tail = np.exp(-t * 8.0) * rng.normal(0, 0.05, tail_len)
+
+
+    signal = np.concatenate([noise, clap, tail])
+    return signal,sr, true_onset
 
 # ---------- dsp.py ----------
 
@@ -84,6 +102,35 @@ def test_fft_max_frequency_is_nyquist(synthetic_signal):
     assert np.max(freq) == pytest.approx(sr / 2, rel=0.01)
 
 
+# does find_onset() actually finds the clap, within a small tolerance
+def test_find_onset_locates_clap_after_leading_noise(signal_with_leading_noise):
+    signal , sr, true_onset = signal_with_leading_noise
+    detected_onset = find_onset(signal)
+    assert detected_onset == pytest.approx(true_onset, abs = int(0.01*sr))
+
+
+def test_find_onset_on_signal_with_no_leading_noise(synthetic_signal):
+    signal, sr = synthetic_signal
+    onset = find_onset(signal)
+    assert onset < int(0.01*sr)
+
+def test_find_onset_rejects_silent_signal():
+    silent = np.zeros(1000)
+    with pytest.raises(ValueError):
+        find_onset(silent)
+
+def test_extract_impulse_response_removes_leading_noise(signal_with_leading_noise):
+    signal, sr, true_onset = signal_with_leading_noise
+    extracted = extract_impulse_response(signal, sr)
+    assert len(extracted) < len(signal)
+    assert len(extracted) == pytest.approx(len(signal) - true_onset, abs = int(0.01 * sr))
+
+def test_extract_impulse_response_starts_near_peak(signal_with_leading_noise):
+    signal, sr ,_ = signal_with_leading_noise
+    extracted = extract_impulse_response(signal, sr)
+    peak_idx_in_extracted = np.argmax(np.abs(extracted))
+    assert peak_idx_in_extracted < int(0.01*sr)
+
 # ---------- audio_utils.py ----------
 
 def test_downsample_for_preview_respects_target_points(synthetic_signal):
@@ -98,7 +145,6 @@ def test_downsample_for_preview_short_signal_returns_full_signal():
     signal = np.random.randn(50)
     time, amplitude = downsample_for_preview(signal, sr, target_points=2000)
     assert len(amplitude) == 50
-
 
 # ---------- app.py ----------
 
