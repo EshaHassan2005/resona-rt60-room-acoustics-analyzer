@@ -2,12 +2,10 @@ from flask import Flask,request,jsonify
 from flask_cors import CORS
 
 from audio_utils import load_audio, downsample_for_preview, AudioLoadError
-from dsp import energy_decay, get_fft, all_octave_bands
+from dsp import energy_decay, get_fft, all_octave_bands,extract_impulse_response
 from scipy import stats
 
 import numpy as np
-
-
 
 app=Flask(__name__)
 CORS(app)
@@ -67,6 +65,7 @@ def upload():
 def energy_curve():
     try:
         signal, sample_rate=get_uploaded_audio()
+        signal = extract_impulse_response(signal,sample_rate) # added this line
         decay_db=energy_decay(signal, sample_rate)
     except AudioLoadError as e:
         return jsonify({"error":str(e)}), 400
@@ -80,9 +79,12 @@ def energy_curve():
 def octave_bands_route():
     try:
         signal, sample_rate= get_uploaded_audio()
+        signal = extract_impulse_response(signal,sample_rate)
         bands = all_octave_bands(signal, sample_rate)
     except AudioLoadError as e:
         return jsonify({"error": str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
 
     result = {}
     for center_freq, filtered_signal in bands.items():

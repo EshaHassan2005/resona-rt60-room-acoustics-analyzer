@@ -61,3 +61,76 @@ def get_fft(signal:np.ndarray,sample_rate: int):
 
     return (np.abs(fft_result),frequencies)
 
+
+def find_onset(signal: np.ndarray, threshold_db: float = 20.0) -> int:
+    # getting the peak location and value
+
+    peak_idx = np.argmax(np.abs(signal))
+    peak_val = np.abs(signal[peak_idx])
+
+    # a check (if theres no real clap to detect)
+
+    if peak_val <= 0:
+        raise ValueError("Signal has no measurable energy")
+
+    # computing the actual thresold amplitude
+    # we know the peak(loudest point) is say 1.0(i assumed).. want to say anything quiter than 20dB below that peak counts as silence/bg noise
+    # so converting 20 dB into a fraction of "1.0" to acctually compare
+    thresold = peak_val * (10 ** (-threshold_db/20))
+    below_threshold = np.abs(signal[:peak_idx + 1]) < thresold 
+
+    # quiet samples before the clap takes off
+    quiet_indices = np.where(below_threshold)[0]
+
+    onset_idx = (quiet_indices[-1]+1) if len(quiet_indices)>0 else 0
+    return onset_idx
+
+
+def extract_impulse_response(signal: np.ndarray, sample_rate: int, threshold_db: float = 20.0)-> np.ndarray:
+
+    onset_idx = find_onset(signal, threshold_db)
+    return signal[onset_idx:]
+
+# week 3
+
+def clarity_index(impulse_response: np.ndarray, sample_rate: int, time_ms: float) -> float:
+    """
+    Computes a clarity index (C50 if time_ms=50, C80 if time_ms=80) in dB:
+    the ratio of early arriving energy to late arriving energy, split at
+    the given time cutoff. Positive = early energy dominates (clear sound).
+    Negative = late reflections dominate (muddy/blurred sound).
+    """
+    cutoff_sample = int((time_ms / 1000) * sample_rate)
+
+    energy = impulse_response ** 2
+    early_energy = np.sum(energy[:cutoff_sample])
+    late_energy = np.sum(energy[cutoff_sample:])
+
+    if late_energy <= 0:
+        raise ValueError("No late-arriving energy found - check recording length/cutoff.")
+
+    return 10 * np.log10(early_energy / late_energy)
+
+
+def definition_index(impulse_response: np.ndarray, sample_rate: int, time_ms: float = 50.0) -> float:
+    """
+    Computes D50 (Deutlichkeit/Definition): the percentage of total energy
+    that arrives within the first `time_ms` milliseconds. Higher = more
+    energy concentrated early = better speech intelligibility.
+    """
+    cutoff_sample = int((time_ms / 1000) * sample_rate)
+
+    energy = impulse_response ** 2
+    early_energy = np.sum(energy[:cutoff_sample])
+    total_energy = np.sum(energy)
+
+    if total_energy <= 0:
+        raise ValueError("Signal has no measurable energy - check the recording.")
+
+    return (early_energy / total_energy) * 100
+
+
+
+
+
+
