@@ -2,7 +2,8 @@ from flask import Flask,request,jsonify
 from flask_cors import CORS
 
 from audio_utils import load_audio, downsample_for_preview, AudioLoadError
-from dsp import energy_decay, get_fft, all_octave_bands,extract_impulse_response
+from dsp import (energy_decay, get_fft, all_octave_bands,extract_impulse_response, estimate_rt60, clarity_index, definition_index,)
+from treatment import load_acoustic_targets, recommend_treatment
 from scipy import stats
 
 import numpy as np
@@ -117,10 +118,11 @@ def fft_route():
 
 
 #RT60 calculation part
-@app.route('/RT60',method=['GET','POST'])
+@app.route('/RT60',methods=['GET','POST'])
 def rt60_route():
     try:
         signal, sample_rate=get_uploaded_audio()
+        signal = extract_impulse_response(signal, sample_rate)
         decay_db_y=energy_decay(signal, sample_rate)
     except AudioLoadError as e:
         return jsonify({"error":str(e)}), 400
@@ -128,33 +130,82 @@ def rt60_route():
         return jsonify({"error": str(e)}), 422
     
     time_x = (np.arange(len(decay_db_y))/ sample_rate)
-    #for T20
-    index_y_start=np.abs(decay_db_y-(-5)).argmin()
-    index_y_end=np.abs(decay_db_y-(-25)).argmin()
+    try:
+        t20 = estimate_rt60(decay_db_y, time_x, db_start=-5, db_end=-25)
+        t30 = estimate_rt60(decay_db_y, time_x, db_start=-5, db_end=-35)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
 
-    y=decay_db_y[index_y_start:index_y_end+1]
-    x=time_x[index_y_start:index_y_end+1]
-
-    slope, intercept, r, p, std_err = stats.linregress(x.tolist(),y.tolist())
-
-    RT60_20=-(60/slope) #####
+    return jsonify({"status":"success","sampling_rate": sample_rate,"RT60_T20":t20["rt60_seconds"],"RT60_T30":t30["rt60_seconds"],"r_squared_T20":t20["r_squared"],"r_squared_T30":t30["r_squared"],}),200
 
 
-    #for T30
+@app.route('/clarity', methods=['POST'])
+def clarity_route():
+    try:
+        signal, sample_rate = get_uploaded_audio()
+        signal = extract_impulse_response(signal, sample_rate)
+        c50 = clarity_index(signal, sample_rate, time_ms=50.0)
+        c80 = clarity_index(signal, sample_rate, time_ms=80.0)
+        d50 = definition_index(signal, sample_rate, time_ms=50.0)
+    except AudioLoadError as e:
+        return jsonify({"error": str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
 
-    index_y_start=np.abs(decay_db_y-(-5)).argmin()
-    index_y_end=np.abs(decay_db_y-(-35)).argmin()
-
-    y=decay_db_y[index_y_start:index_y_end+1]
-    x=time_x[index_y_start:index_y_end+1]
-
-    slope, intercept, r, p, std_err = stats.linregress(x.tolist(),y.tolist())
-
-    RT60_30=-(60/slope) #####
-
-    return jsonify({"status":"success","RT60_20":RT60_20,"RT60_30":RT60_30}),200
+    return jsonify({
+        "status": "success",
+        "sampling_rate": sample_rate,
+        "C50": c50,
+        "C80": c80,
+        "D50": d50,
+    }), 200
 
 
+@app.route('/treatment', methods=['POST'])
+def treatment_route():
+    volume_raw = request.form.get("volume_m3")
+    room_type = request.form.get("room_type")
+    material = request.form.get("material", "acoustic_panel")
+
+    if not volume_raw:
+        return jsonify({"error": "Missing required form field 'volume_m3'."}), 400
+    
+    if not room_type:
+        return jsonify({"error": "Missing required form field 'room_type'."}), 400
+
+    try:
+        volume_m3= float(volume_raw)
+    except ValueError:
+        return jsonify({"error":"'volume_m3' must be a number."}), 400
+
+    try:
+        signal, sample_rate = get_uploaded_audio()
+        signal=extract_impulse_response(signal, sample_rate)
+        bands=all_octave_bands(signal,sample_rate)
+    except AudioLoadError as e:
+        return jsonify({"error":str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error":str(e)}), 422
+
+    measured_rt60_by_band={}
+    for center_freq, filtered_signal in bands.items():
+        try:
+            decay_db= energy_decay(filtered_signal, sample_rate)
+            time = np.arange(len(decay_db))/sample_rate
+            t20 = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
+            measured_rt60_by_band[str(center_freq)] = t20["rt60_seconds"]
+        except ValueError:
+            continue
+    if not measured_rt60_by_band:
+        return jsonify({"error": "Could not estimate RT60 for any octave band from this recording."}), 422
+
+    targets= load_acoustic_targets()
+    try:
+        result = recommend_treatment(measured_rt60_by_band, volume_m3, room_type, targets, material=material)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"status": "success", **result}), 200
     
 
 if __name__=="__main__":

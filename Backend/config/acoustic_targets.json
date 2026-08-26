@@ -1,0 +1,128 @@
+{
+  "_meta": {
+    "description": "RT60 targets and absorption coefficients used by the Inverse-Sabine treatment recommender. Values are drawn from published standards and ASTM C423 reverberation-chamber test data, not estimated. See per-entry 'source' fields for specifics.",
+    "sources": [
+      {
+        "id": "ansi_s12_60",
+        "citation": "ANSI/ASA S12.60-2010 (R2020), Acoustical Performance Criteria, Design Requirements, and Guidelines for Schools",
+        "note": "Sets the maximum permissible unoccupied RT60 for core learning spaces: 0.6s under 283 m^3, 0.7s for 283-566 m^3."
+      },
+      {
+        "id": "architectural_acoustics_practice",
+        "citation": "Cross-referenced architectural acoustics guidance (Rational Acoustics 'Reverberation Time' technical note; commonly cited industry RT60 charts)",
+        "note": "Used for room types without a binding code standard (studios, halls, offices, home theaters) where practice ranges are well agreed upon but not codified."
+      },
+      {
+        "id": "absorption_coefficient_table",
+        "citation": "Published sound absorption coefficient reference table, ASTM C423 reverberation-room method, six standard octave bands (125-4000 Hz)",
+        "note": "Values used directly (not rounded/estimated) from a compiled architectural-acoustics materials table."
+      }
+    ]
+  },
+
+  "room_types": {
+    "classroom": {
+      "label": "Classroom",
+      "target_rt60_seconds": 0.6,
+      "acceptable_range_seconds": [0.4, 0.6],
+      "source": "ansi_s12_60 - max 0.6s for core learning spaces under 283 m^3 (0.7s for 283-566 m^3)"
+    },
+    "lecture_hall": {
+      "label": "Lecture Hall / Auditorium",
+      "target_rt60_seconds": 1.0,
+      "acceptable_range_seconds": [0.8, 1.2],
+      "source": "architectural_acoustics_practice - larger speech-focused spaces, 0.8-1.2s"
+    },
+    "recording_studio": {
+      "label": "Recording Studio",
+      "target_rt60_seconds": 0.3,
+      "acceptable_range_seconds": [0.2, 0.4],
+      "source": "architectural_acoustics_practice - small studio/control room mid-frequency target, 0.2-0.4s"
+    },
+    "concert_hall": {
+      "label": "Concert Hall",
+      "target_rt60_seconds": 1.8,
+      "acceptable_range_seconds": [1.8, 2.2],
+      "source": "architectural_acoustics_practice - symphonic/concert hall target, 1.8-2.2s"
+    },
+    "opera_house": {
+      "label": "Opera House",
+      "target_rt60_seconds": 1.5,
+      "acceptable_range_seconds": [1.2, 1.8],
+      "source": "architectural_acoustics_practice - mixed speech/music venue target, 1.2-1.8s"
+    },
+    "office": {
+      "label": "Office",
+      "target_rt60_seconds": 0.45,
+      "acceptable_range_seconds": [0.4, 0.5],
+      "source": "architectural_acoustics_practice - small office/meeting room target, 0.4-0.5s"
+    },
+    "conference_room": {
+      "label": "Conference Room",
+      "target_rt60_seconds": 0.55,
+      "acceptable_range_seconds": [0.5, 0.6],
+      "source": "architectural_acoustics_practice - conference room target, 0.5-0.6s"
+    },
+    "home_theater": {
+      "label": "Home Theater / Living Room",
+      "target_rt60_seconds": 0.3,
+      "acceptable_range_seconds": [0.2, 0.4],
+      "source": "architectural_acoustics_practice - home theater target, 0.2-0.4s"
+    }
+  },
+
+  "materials": {
+    "acoustic_panel": {
+      "label": "Rock Wool / Mineral Wool Panel, 50mm, 33 kg/m3 (direct to masonry)",
+      "unit": "m^2 per sabin",
+      "absorption_coefficients": {
+        "125": 0.15,
+        "250": 0.60,
+        "500": 0.90,
+        "1000": 0.90,
+        "2000": 0.90,
+        "4000": 0.85
+      },
+      "source": "absorption_coefficient_table"
+    },
+    "bass_trap": {
+      "label": "Rock Wool / Mineral Wool Panel, 100mm, 33 kg/m3 (direct to masonry) - thicker profile for improved low-frequency absorption",
+      "unit": "m^2 per sabin",
+      "absorption_coefficients": {
+        "125": 0.35,
+        "250": 0.95,
+        "500": 0.98,
+        "1000": 0.92,
+        "2000": 0.90,
+        "4000": 0.85
+      },
+      "source": "absorption_coefficient_table"
+    },
+    "heavy_curtain": {
+      "label": "Medium Velour Curtain, 50% gather, over solid backing",
+      "unit": "m^2 per sabin",
+      "absorption_coefficients": {
+        "125": 0.05,
+        "250": 0.25,
+        "500": 0.40,
+        "1000": 0.50,
+        "2000": 0.60,
+        "4000": 0.50
+      },
+      "source": "absorption_coefficient_table"
+    },
+    "carpet_rug": {
+      "label": "9mm Pile Carpet, Tufted, on Felt Underlay",
+      "unit": "m^2 per sabin",
+      "absorption_coefficients": {
+        "125": 0.08,
+        "250": 0.08,
+        "500": 0.30,
+        "1000": 0.60,
+        "2000": 0.75,
+        "4000": 0.80
+      },
+      "source": "absorption_coefficient_table"
+    }
+  }
+}

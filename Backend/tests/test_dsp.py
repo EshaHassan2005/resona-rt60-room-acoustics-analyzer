@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dsp import energy_decay, bandpass, octave_band, all_octave_bands, get_fft, OCTAVE_BANDS, find_onset, extract_impulse_response
+from dsp import (energy_decay, bandpass, octave_band, all_octave_bands, get_fft, OCTAVE_BANDS, find_onset, extract_impulse_response, clarity_index, definition_index, estimate_rt60,)
 from audio_utils import load_audio, downsample_for_preview, AudioLoadError
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "synthetic_clap.wav")
@@ -130,6 +130,111 @@ def test_extract_impulse_response_starts_near_peak(signal_with_leading_noise):
     extracted = extract_impulse_response(signal, sr)
     peak_idx_in_extracted = np.argmax(np.abs(extracted))
     assert peak_idx_in_extracted < int(0.01*sr)
+
+# ---------- clarity_index / definition_index ----------
+
+@pytest.fixture
+def early_dominant_ir():
+    """A synthetic impulse response where nearly all the energy arrives early."""
+    sr = 44100
+    ir = np.zeros(sr)  # 1 second
+    ir[0] = 1.0  # big early spike
+    ir[int(0.02 * sr)] = 0.2  # small early reflection, still within 50ms
+    ir[int(0.3 * sr)] = 0.05  # tiny late reflection
+    return ir, sr
+
+
+@pytest.fixture
+def late_dominant_ir():
+    """A synthetic impulse response where most of the energy arrives late."""
+    sr = 44100
+    ir = np.zeros(sr)
+    ir[0] = 0.05  # tiny early spike
+    ir[int(0.3 * sr)] = 1.0  # dominant late reflection
+    ir[int(0.5 * sr)] = 0.8
+    return ir, sr
+
+
+def test_clarity_index_positive_for_early_dominant_signal(early_dominant_ir):
+    ir, sr = early_dominant_ir
+    c50 = clarity_index(ir, sr, time_ms=50)
+    assert c50 > 0
+
+
+def test_clarity_index_negative_for_late_dominant_signal(late_dominant_ir):
+    ir, sr = late_dominant_ir
+    c50 = clarity_index(ir, sr, time_ms=50)
+    assert c50 < 0
+
+
+def test_clarity_index_raises_when_no_late_energy():
+    sr = 44100
+    ir = np.zeros(int(0.1 * sr))
+    ir[0] = 1.0  # all energy is before the 80ms cutoff, so "late" energy is 0
+    with pytest.raises(ValueError):
+        clarity_index(ir, sr, time_ms=80)
+
+
+def test_definition_index_is_between_0_and_100(early_dominant_ir):
+    ir, sr = early_dominant_ir
+    d50 = definition_index(ir, sr, time_ms=50)
+    assert 0 <= d50 <= 100
+
+
+def test_definition_index_high_for_early_dominant_signal(early_dominant_ir):
+    ir, sr = early_dominant_ir
+    d50 = definition_index(ir, sr, time_ms=50)
+    assert d50 > 90  # nearly all energy is within the first 50ms
+
+
+def test_definition_index_low_for_late_dominant_signal(late_dominant_ir):
+    ir, sr = late_dominant_ir
+    d50 = definition_index(ir, sr, time_ms=50)
+    assert d50 < 10  # nearly all energy arrives after 50ms
+
+
+def test_definition_index_rejects_silent_signal():
+    silent = np.zeros(1000)
+    with pytest.raises(ValueError):
+        definition_index(silent, 44100, time_ms=50)
+
+
+# ---------- estimate_rt60 (week 4) ----------
+
+@pytest.fixture
+def synthetic_decay_curve():
+    """A perfectly linear decay curve: -20 dB/second, known RT60 = 3 seconds."""
+    sr = 1000
+    duration_s = 2.0
+    time = np.arange(int(duration_s * sr)) / sr
+    decay_db = -20.0 * time  # slope of -20 dB/s => RT60 = 60/20 = 3s
+    return decay_db, time
+
+
+def test_estimate_rt60_recovers_known_slope(synthetic_decay_curve):
+    decay_db, time = synthetic_decay_curve
+    result = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
+    assert result["rt60_seconds"] == pytest.approx(3.0, rel=0.01)
+
+
+def test_estimate_rt60_r_squared_is_near_1_for_perfect_line(synthetic_decay_curve):
+    decay_db, time = synthetic_decay_curve
+    result = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
+    assert result["r_squared"] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_estimate_rt60_rejects_mismatched_lengths():
+    with pytest.raises(ValueError):
+        estimate_rt60(np.zeros(10), np.zeros(5))
+
+
+def test_estimate_rt60_rejects_flat_curve():
+    # a curve that never actually decays across the requested dB window
+    decay_db = np.zeros(100)
+    time = np.arange(100) / 100
+    with pytest.raises(ValueError):
+        estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
+
 
 # ---------- audio_utils.py ----------
 

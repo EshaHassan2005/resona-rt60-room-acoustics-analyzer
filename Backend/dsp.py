@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import scipy.signal
+import scipy.stats
 from scipy.integrate import cumulative_trapezoid
 from scipy.fft import fft,fftfreq
 
@@ -75,7 +76,7 @@ def find_onset(signal: np.ndarray, threshold_db: float = 20.0) -> int:
 
     # computing the actual thresold amplitude
     # we know the peak(loudest point) is say 1.0(i assumed).. want to say anything quiter than 20dB below that peak counts as silence/bg noise
-    # so converting 20 dB into a fraction of "1.0" to acctually compare
+    # so converting 20 dB into a fraction of "1.0" to actually compare
     thresold = peak_val * (10 ** (-threshold_db/20))
     below_threshold = np.abs(signal[:peak_idx + 1]) < thresold 
 
@@ -130,6 +131,32 @@ def definition_index(impulse_response: np.ndarray, sample_rate: int, time_ms: fl
     return (early_energy / total_energy) * 100
 
 
+def estimate_rt60(decay_db: np.ndarray, time: np.ndarray, db_start: float=-5.0, db_end: float=-25.0)->dict:
+    if len(decay_db) != len(time):
+        raise ValueError("decay_db and time arrays must be of the same length.")
+
+    idx_start = np.abs(decay_db-db_start).argmin()
+    idx_end = np.abs(decay_db-db_end).argmin()
+
+    if idx_end <= idx_start:
+        raise ValueError(f"Decay curve doesn't clearly span {db_start} db to {db_end} db - recording maybe too short or too noisy to fit this range.")
+
+    y = decay_db[idx_start:idx_end+1]
+    x = time[idx_start:idx_end+1]
+
+    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(x,y)
+
+    if slope>=0:
+        raise ValueError("Decay curve is not decreasing over this range - cannot estimate RT60.")
+
+    rt60_secoonds = -60.0/slope
+
+    return {
+        "rt60_seconds": float(rt60_secoonds),
+        "slope": float(slope),
+        "intercept": float(intercept),
+        "r_squared": float(r_value**2),
+    }
 
 
 
