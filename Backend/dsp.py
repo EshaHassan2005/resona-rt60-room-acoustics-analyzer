@@ -3,27 +3,123 @@ import numpy as np
 import scipy.signal
 import scipy.stats
 from scipy.integrate import cumulative_trapezoid
-from scipy.fft import fft,fftfreq
+from scipy.fft import fft, fftfreq
 
 #applicable bandwidths
 OCTAVE_BANDS=[125,250,500,1000,2000,4000]
 
-def energy_decay(impulse_response:np.ndarray,sampling_rate: int)->np.ndarray:
-    energy=impulse_response**2
-    dt=1.0/sampling_rate
+def lundeby_correction(impulse_response: np.ndarray, sampling_rate: int) -> tuple[np.ndarray, float, float]:
+    """
+    Implements Lundeby's method (ISO 3382-1) for noise floor estimation and truncation.
+    Returns (decay_db, t_cross, noise_floor_db).
+    """
+    energy = impulse_response ** 2
+    n_samples = len(energy)
+    dt = 1.0 / sampling_rate
+    time = np.arange(n_samples) * dt
 
-    energy_rev=energy[::-1]
+    if n_samples < int(0.05 * sampling_rate):
+        return _raw_schroeder(energy, dt), time[-1], -60.0
 
-    integrated_rev=cumulative_trapezoid(energy_rev,dx=dt,initial=0)
-    schroeder_curve = integrated_rev[::-1]
+    block_size = max(1, int(0.02 * sampling_rate))  # 20ms blocks
+    n_blocks = n_samples // block_size
+    if n_blocks < 5:
+        return _raw_schroeder(energy, dt), time[-1], -60.0
 
-    peak = np.max(schroeder_curve)
-    if peak<=0:
-        raise ValueError("Signal has no measurable energy - check the recording.")
+    reshaped = energy[: n_blocks * block_size].reshape(n_blocks, block_size)
+    block_energy = np.mean(reshaped, axis=1)
+    block_times = (np.arange(n_blocks) * block_size + block_size / 2) * dt
+    
+    block_energy_db = 10 * np.log10(np.maximum(block_energy, 1e-12))
+    max_db = np.max(block_energy_db)
 
-    normalized = schroeder_curve/peak
+    tail_blocks = max(1, int(0.1 * n_blocks))
+    noise_floor_db = float(np.mean(block_energy_db[-tail_blocks:]))
+
+    t_cross = time[-1]
+    slope = -20.0
+    intercept = 0.0
+
+    for _ in range(5):
+        valid_mask = (block_energy_db <= max_db - 5.0) & (block_energy_db >= noise_floor_db + 10.0)
+        if np.sum(valid_mask) < 3:
+            break
+
+        x_fit = block_times[valid_mask]
+        y_fit = block_energy_db[valid_mask]
+
+        reg = scipy.stats.linregress(x_fit, y_fit)
+        if reg.slope >= 0:
+            break
+
+        slope, intercept = float(reg.slope), float(reg.intercept)
+
+        new_t_cross = (noise_floor_db - intercept) / slope
+        if new_t_cross <= 0 or new_t_cross > time[-1]:
+            break
+
+        noise_mask = block_times >= new_t_cross
+        if np.sum(noise_mask) >= 2:
+            noise_floor_db = float(np.mean(block_energy_db[noise_mask]))
+
+        if abs(new_t_cross - t_cross) < 0.005:
+            t_cross = new_t_cross
+            break
+
+        t_cross = new_t_cross
+
+    cross_idx = min(n_samples, max(1, int(t_cross * sampling_rate)))
+    noise_lin = 10 ** (noise_floor_db / 10.0)
+    subtracted_energy = np.maximum(0, energy[:cross_idx] - noise_lin)
+
+    decay_rate = -slope * np.log(10) / 10.0
+    if decay_rate > 0:
+        tail_energy = (10 ** ((slope * t_cross + intercept) / 10.0)) / decay_rate
+    else:
+        tail_energy = 0.0
+
+    integrated_rev = cumulative_trapezoid(subtracted_energy[::-1], dx=dt, initial=0) + tail_energy
+    schroeder_active = integrated_rev[::-1]
+
+    schroeder_curve = np.zeros(n_samples, dtype=np.float64)
+    schroeder_curve[:cross_idx] = schroeder_active
+    if cross_idx < n_samples:
+        t_tail = (np.arange(cross_idx, n_samples) - cross_idx) * dt
+        if decay_rate > 0:
+            schroeder_curve[cross_idx:] = tail_energy * np.exp(-decay_rate * t_tail)
+        else:
+            schroeder_curve[cross_idx:] = 1e-12
+
+    peak = np.max(schroeder_curve) if len(schroeder_curve) > 0 else 0
+    if peak <= 0:
+        return _raw_schroeder(energy, dt), time[-1], noise_floor_db
+
+    normalized = schroeder_curve / peak
     normalized = np.clip(normalized, 1e-12, None)
-    return 10*np.log10(normalized)
+    decay_db = 10 * np.log10(normalized)
+
+    return decay_db, t_cross, noise_floor_db
+
+def _raw_schroeder(energy: np.ndarray, dt: float) -> np.ndarray:
+    integrated_rev = cumulative_trapezoid(energy[::-1], dx=dt, initial=0)
+    schroeder_curve = integrated_rev[::-1]
+    peak = np.max(schroeder_curve)
+    if peak <= 0:
+        raise ValueError("Signal has no measurable energy - check the recording.")
+    normalized = np.clip(schroeder_curve / peak, 1e-12, None)
+    return 10 * np.log10(normalized)
+
+def energy_decay(impulse_response: np.ndarray, sampling_rate: int, use_lundeby: bool = True) -> np.ndarray:
+    if use_lundeby:
+        try:
+            decay_db, _, _ = lundeby_correction(impulse_response, sampling_rate)
+            return decay_db
+        except Exception:
+            pass
+    
+    energy = impulse_response ** 2
+    dt = 1.0 / sampling_rate
+    return _raw_schroeder(energy, dt)
 
 def octave_band(impulse_response:np.ndarray,sample_rate,center_freq:float)->np.ndarray:
     fl=center_freq/math.sqrt(2)
@@ -92,17 +188,8 @@ def extract_impulse_response(signal: np.ndarray, sample_rate: int, threshold_db:
     onset_idx = find_onset(signal, threshold_db)
     return signal[onset_idx:]
 
-# week 3
-
 def clarity_index(impulse_response: np.ndarray, sample_rate: int, time_ms: float) -> float:
-    """
-    Computes a clarity index (C50 if time_ms=50, C80 if time_ms=80) in dB:
-    the ratio of early arriving energy to late arriving energy, split at
-    the given time cutoff. Positive = early energy dominates (clear sound).
-    Negative = late reflections dominate (muddy/blurred sound).
-    """
     cutoff_sample = int((time_ms / 1000) * sample_rate)
-
     energy = impulse_response ** 2
     early_energy = np.sum(energy[:cutoff_sample])
     late_energy = np.sum(energy[cutoff_sample:])
@@ -112,15 +199,8 @@ def clarity_index(impulse_response: np.ndarray, sample_rate: int, time_ms: float
 
     return 10 * np.log10(early_energy / late_energy)
 
-
 def definition_index(impulse_response: np.ndarray, sample_rate: int, time_ms: float = 50.0) -> float:
-    """
-    Computes D50 (Deutlichkeit/Definition): the percentage of total energy
-    that arrives within the first `time_ms` milliseconds. Higher = more
-    energy concentrated early = better speech intelligibility.
-    """
     cutoff_sample = int((time_ms / 1000) * sample_rate)
-
     energy = impulse_response ** 2
     early_energy = np.sum(energy[:cutoff_sample])
     total_energy = np.sum(energy)
@@ -149,15 +229,136 @@ def estimate_rt60(decay_db: np.ndarray, time: np.ndarray, db_start: float=-5.0, 
     if slope>=0:
         raise ValueError("Decay curve is not decreasing over this range - cannot estimate RT60.")
 
-    rt60_secoonds = -60.0/slope
+    rt60_seconds = -60.0/slope
 
     return {
-        "rt60_seconds": float(rt60_secoonds),
+        "rt60_seconds": float(rt60_seconds),
         "slope": float(slope),
         "intercept": float(intercept),
         "r_squared": float(r_value**2),
     }
 
+def calculate_room_modes(
+    impulse_response: np.ndarray,
+    sample_rate: int,
+    length_m: float = 6.0,
+    width_m: float = 5.0,
+    height_m: float = 2.8,
+    max_freq: float = 300.0,
+) -> dict:
+    c = 343.0
+    volume = length_m * width_m * height_m
 
+    try:
+        decay_db = energy_decay(impulse_response, sample_rate)
+        time_x = np.arange(len(decay_db)) / sample_rate
+        rt60_info = estimate_rt60(decay_db, time_x, db_start=-5, db_end=-25)
+        rt60_sec = rt60_info["rt60_seconds"]
+    except Exception:
+        rt60_sec = 0.5
 
+    schroeder_freq = 2000.0 * math.sqrt(rt60_sec / volume) if volume > 0 else 200.0
 
+    modes = []
+    max_nx = int(math.ceil(2 * max_freq * length_m / c)) + 1
+    max_ny = int(math.ceil(2 * max_freq * width_m / c)) + 1
+    max_nz = int(math.ceil(2 * max_freq * height_m / c)) + 1
+
+    for nx in range(max_nx):
+        for ny in range(max_ny):
+            for nz in range(max_nz):
+                if nx == 0 and ny == 0 and nz == 0:
+                    continue
+
+                freq = (c / 2.0) * math.sqrt((nx / length_m) ** 2 + (ny / width_m) ** 2 + (nz / height_m) ** 2)
+                if freq > max_freq:
+                    continue
+                if freq >= schroeder_freq:
+                    continue
+
+                non_zeros = (nx > 0) + (ny > 0) + (nz > 0)
+                if non_zeros == 1:
+                    mode_type = "axial"
+                elif non_zeros == 2:
+                    mode_type = "tangential"
+                else:
+                    mode_type = "oblique"
+
+                modes.append({
+                    "frequency": round(freq, 2),
+                    "indices": [nx, ny, nz],
+                    "type": mode_type
+                })
+
+    modes.sort(key=lambda x: x["frequency"])
+
+    amp, freq_axis = get_fft(impulse_response, sample_rate)
+    half = len(freq_axis) // 2
+    amp_half = amp[:half]
+    freq_half = freq_axis[:half]
+
+    mask = (freq_half >= 20.0) & (freq_half <= max_freq)
+    fft_freqs = freq_half[mask].tolist()
+    fft_amps = amp_half[mask].tolist()
+
+    matched_peaks = []
+    if len(fft_amps) > 0:
+        norm_amps = np.array(fft_amps)
+        if np.max(norm_amps) > 0:
+            norm_amps = norm_amps / np.max(norm_amps)
+
+        peaks, _ = scipy.signal.find_peaks(
+            norm_amps, height=0.1, distance=max(1, int(2 / (fft_freqs[1] - fft_freqs[0]))) if len(fft_freqs) > 1 else 1
+        )
+        peak_freqs = [fft_freqs[p] for p in peaks]
+
+        for pf in peak_freqs:
+            closest_mode = min(modes, key=lambda m: abs(m["frequency"] - pf)) if modes else None
+            if closest_mode and abs(closest_mode["frequency"] - pf) <= 2.5:
+                matched_peaks.append({
+                    "frequency": round(pf, 2),
+                    "matched_mode": closest_mode
+                })
+
+    return {
+        "status": "success",
+        "room_dimensions": {"length_m": length_m, "width_m": width_m, "height_m": height_m, "volume_m3": volume},
+        "schroeder_freq": round(schroeder_freq, 2),
+        "rt60_seconds": round(rt60_sec, 3),
+        "modes": modes,
+        "fft": {
+            "frequencies": [round(f, 2) for f in fft_freqs],
+            "amplitudes": [round(a, 4) for a in fft_amps]
+        },
+        "matched_peaks": matched_peaks
+    }
+
+def calculate_waterfall(
+    impulse_response: np.ndarray,
+    sample_rate: int,
+    target_points: int = 50
+) -> dict:
+    bands = all_octave_bands(impulse_response, sample_rate)
+    result_bands = {}
+
+    max_duration = min(1.5, len(impulse_response) / sample_rate)
+    time_grid = np.linspace(0, max_duration, target_points)
+
+    for center_freq, filtered_signal in bands.items():
+        try:
+            decay_db = energy_decay(filtered_signal, sample_rate)
+            time_orig = np.arange(len(decay_db)) / sample_rate
+
+            decay_interp = np.interp(time_grid, time_orig, decay_db)
+            decay_interp = np.clip(decay_interp, -60.0, 0.0)
+
+            result_bands[str(center_freq)] = [round(v, 2) for v in decay_interp.tolist()]
+        except Exception:
+            continue
+
+    return {
+        "status": "success",
+        "sampling_rate": sample_rate,
+        "time_points": [round(t, 3) for t in time_grid.tolist()],
+        "bands": result_bands
+    }

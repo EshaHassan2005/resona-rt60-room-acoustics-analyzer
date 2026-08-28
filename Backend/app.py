@@ -2,7 +2,17 @@ from flask import Flask,request,jsonify
 from flask_cors import CORS
 
 from audio_utils import load_audio, downsample_for_preview, AudioLoadError
-from dsp import (energy_decay, get_fft, all_octave_bands,extract_impulse_response, estimate_rt60, clarity_index, definition_index,)
+from dsp import (
+    energy_decay,
+    get_fft,
+    all_octave_bands,
+    extract_impulse_response,
+    estimate_rt60,
+    clarity_index,
+    definition_index,
+    calculate_room_modes,
+    calculate_waterfall,
+)
 from treatment import load_acoustic_targets, recommend_treatment
 from scipy import stats
 
@@ -30,7 +40,7 @@ def index():
     return jsonify({
         "status": "ok",
         "service": "Resona backend",
-        "endpoints": ["/upload","/energydecay","/fft"],
+        "endpoints": ["/upload", "/energydecay", "/fft", "/RT60", "/clarity", "/treatment", "/roommodes", "/waterfall"],
     })
 
 
@@ -65,22 +75,22 @@ def upload():
 @app.route('/energydecay',methods=['POST'])
 def energy_curve():
     try:
-        signal, sample_rate=get_uploaded_audio()
-        signal = extract_impulse_response(signal,sample_rate) # added this line
-        decay_db=energy_decay(signal, sample_rate)
+        signal, sample_rate = get_uploaded_audio()
+        signal = extract_impulse_response(signal, sample_rate)
+        decay_db = energy_decay(signal, sample_rate)
     except AudioLoadError as e:
-        return jsonify({"error":str(e)}), 400
+        return jsonify({"error": str(e)}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
 
-    time = (np.arange(len(decay_db))/ sample_rate).tolist()
-    return jsonify({"status":"success","sampling_rate":sample_rate, "time": time, "decay_db": decay_db.tolist()}),200
+    time = (np.arange(len(decay_db)) / sample_rate).tolist()
+    return jsonify({"status": "success", "sampling_rate": sample_rate, "time": time, "decay_db": decay_db.tolist()}), 200
 
 @app.route("/octavebands", methods=["POST"])
 def octave_bands_route():
     try:
-        signal, sample_rate= get_uploaded_audio()
-        signal = extract_impulse_response(signal,sample_rate)
+        signal, sample_rate = get_uploaded_audio()
+        signal = extract_impulse_response(signal, sample_rate)
         bands = all_octave_bands(signal, sample_rate)
     except AudioLoadError as e:
         return jsonify({"error": str(e)}), 400
@@ -106,7 +116,7 @@ def fft_route():
         signal, sample_rate= get_uploaded_audio()
     except AudioLoadError as e:
         return jsonify({"error": str(e)}), 400
-    
+
     amp,freq=get_fft(signal,sample_rate)
     half = len(freq)//2
     return jsonify({
@@ -128,7 +138,7 @@ def rt60_route():
         return jsonify({"error":str(e)}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
-    
+
     time_x = (np.arange(len(decay_db_y))/ sample_rate)
     try:
         t20 = estimate_rt60(decay_db_y, time_x, db_start=-5, db_end=-25)
@@ -136,8 +146,15 @@ def rt60_route():
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
 
-    return jsonify({"status":"success","sampling_rate": sample_rate,"RT60_T20":t20["rt60_seconds"],"RT60_T30":t30["rt60_seconds"],"r_squared_T20":t20["r_squared"],"r_squared_T30":t30["r_squared"],}),200
-
+    return jsonify({
+        "status": "success",
+        "sampling_rate": sample_rate,
+        "RT60_T20": t20["rt60_seconds"],
+        "RT60_T30": t30["rt60_seconds"],
+        "r_squared_T20": t20["r_squared"],
+        "r_squared_T30": t30["r_squared"],
+        "lundeby_corrected": True
+    }), 200
 
 @app.route('/clarity', methods=['POST'])
 def clarity_route():
@@ -160,23 +177,31 @@ def clarity_route():
         "D50": d50,
     }), 200
 
-
 @app.route('/treatment', methods=['POST'])
 def treatment_route():
     volume_raw = request.form.get("volume_m3")
     room_type = request.form.get("room_type")
     material = request.form.get("material", "acoustic_panel")
-
-    if not volume_raw:
-        return jsonify({"error": "Missing required form field 'volume_m3'."}), 400
     
+    length_raw = request.form.get("length_m")
+    width_raw = request.form.get("width_m")
+    height_raw = request.form.get("height_m")
+
+    if length_raw and width_raw and height_raw:
+        try:
+            volume_m3 = float(length_raw) * float(width_raw) * float(height_raw)
+        except ValueError:
+            return jsonify({"error": "Room dimensions must be valid numbers."}), 400
+    elif volume_raw:
+        try:
+            volume_m3 = float(volume_raw)
+        except ValueError:
+            return jsonify({"error": "'volume_m3' must be a number."}), 400
+    else:
+        return jsonify({"error": "Missing room volume or dimensions."}), 400
+
     if not room_type:
         return jsonify({"error": "Missing required form field 'room_type'."}), 400
-
-    try:
-        volume_m3= float(volume_raw)
-    except ValueError:
-        return jsonify({"error":"'volume_m3' must be a number."}), 400
 
     try:
         signal, sample_rate = get_uploaded_audio()
@@ -190,23 +215,89 @@ def treatment_route():
     measured_rt60_by_band={}
     for center_freq, filtered_signal in bands.items():
         try:
-            decay_db= energy_decay(filtered_signal, sample_rate)
-            time = np.arange(len(decay_db))/sample_rate
-            t20 = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
-            measured_rt60_by_band[str(center_freq)] = t20["rt60_seconds"]
+            decay_db = energy_decay(filtered_signal, sample_rate)
+            time = np.arange(len(decay_db)) / sample_rate
+            t20_band = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
+            measured_rt60_by_band[str(center_freq)] = t20_band["rt60_seconds"]
         except ValueError:
             continue
+
     if not measured_rt60_by_band:
         return jsonify({"error": "Could not estimate RT60 for any octave band from this recording."}), 422
 
-    targets= load_acoustic_targets()
+    # Broadband calculations for complete modal metrics & decay chart
+    broadband_decay = energy_decay(signal, sample_rate)
+    time_full = np.arange(len(broadband_decay)) / sample_rate
+    t20 = estimate_rt60(broadband_decay, time_full, db_start=-5, db_end=-25)
+    t30 = estimate_rt60(broadband_decay, time_full, db_start=-5, db_end=-35)
+
+    c50 = clarity_index(signal, sample_rate, time_ms=50.0)
+    c80 = clarity_index(signal, sample_rate, time_ms=80.0)
+    d50 = definition_index(signal, sample_rate, time_ms=50.0)
+
+    # Downsample points for energy decay curve path
+    step = max(1, len(broadband_decay) // 50)
+    points = [
+        {"time": round(float(time_full[i]), 3), "db": round(float(broadband_decay[i]), 2)}
+        for i in range(0, len(broadband_decay), step)
+    ]
+
+    targets = load_acoustic_targets()
     try:
         result = recommend_treatment(measured_rt60_by_band, volume_m3, room_type, targets, material=material)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    return jsonify({"status": "success", **result}), 200
-    
+    total_area_needed = result["bands"].get("500", {}).get("recommended_area_m2", 0.0)
 
-if __name__=="__main__":
-    app.run(debug=True) 
+    return jsonify({
+        "status": "success",
+        "measured_rt60": t20["rt60_seconds"],
+        "RT60_T20": t20["rt60_seconds"],
+        "RT60_T30": t30["rt60_seconds"],
+        "r_squared_T20": t20["r_squared"],
+        "r_squared_T30": t30["r_squared"],
+        "C50": c50,
+        "C80": c80,
+        "D50": d50,
+        "points": points,
+        "total_area_needed_m2": total_area_needed,
+        "lundeby_corrected": True,
+        **result
+    }), 200
+
+@app.route('/roommodes', methods=['POST'])
+def room_modes_route():
+    try:
+        length_m = float(request.form.get("length_m", 6.0))
+        width_m = float(request.form.get("width_m", 5.0))
+        height_m = float(request.form.get("height_m", 2.8))
+    except ValueError:
+        return jsonify({"error": "Length, width, and height must be numbers."}), 400
+
+    try:
+        signal, sample_rate = get_uploaded_audio()
+        signal = extract_impulse_response(signal, sample_rate)
+        modes_data = calculate_room_modes(signal, sample_rate, length_m, width_m, height_m)
+    except AudioLoadError as e:
+        return jsonify({"error": str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+
+    return jsonify(modes_data), 200
+
+@app.route('/waterfall', methods=['POST'])
+def waterfall_route():
+    try:
+        signal, sample_rate = get_uploaded_audio()
+        signal = extract_impulse_response(signal, sample_rate)
+        waterfall_data = calculate_waterfall(signal, sample_rate)
+    except AudioLoadError as e:
+        return jsonify({"error": str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+
+    return jsonify(waterfall_data), 200
+
+if __name__ == "__main__":
+    app.run(debug=True)

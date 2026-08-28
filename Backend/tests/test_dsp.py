@@ -5,11 +5,25 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dsp import (energy_decay, bandpass, octave_band, all_octave_bands, get_fft, OCTAVE_BANDS, find_onset, extract_impulse_response, clarity_index, definition_index, estimate_rt60,)
+from dsp import (
+    energy_decay,
+    bandpass,
+    octave_band,
+    all_octave_bands,
+    get_fft,
+    OCTAVE_BANDS,
+    find_onset,
+    extract_impulse_response,
+    clarity_index,
+    definition_index,
+    estimate_rt60,
+    lundeby_correction,
+    calculate_room_modes,
+    calculate_waterfall,
+)
 from audio_utils import load_audio, downsample_for_preview, AudioLoadError
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "synthetic_clap.wav")
-
 
 @pytest.fixture
 def synthetic_signal():
@@ -32,9 +46,21 @@ def signal_with_leading_noise():
     t = np.arange(tail_len) / sr
     tail = np.exp(-t * 8.0) * rng.normal(0, 0.05, tail_len)
 
-
     signal = np.concatenate([noise, clap, tail])
-    return signal,sr, true_onset
+    return signal, sr, true_onset
+
+@pytest.fixture
+def signal_with_noise_floor():
+    sr = 44100
+    rng = np.random.default_rng(42)
+    duration = 1.5
+    t = np.arange(int(duration * sr)) / sr
+    # Exponential decay (-40 dB/s) + artificial noise floor at ~ -30 dB
+    decay = np.exp(-t * 10.0)
+    noise = rng.normal(0, 0.03, len(t))  # noise floor around -30 dB
+    signal = decay + noise
+    signal = signal / np.max(np.abs(signal))
+    return signal, sr
 
 # ---------- dsp.py ----------
 
@@ -43,20 +69,48 @@ def test_energy_decay_starts_at_zero_db(synthetic_signal):
     decay = energy_decay(signal, sr)
     assert decay[0] == pytest.approx(0.0, abs=1e-6)
 
-
 def test_energy_decay_is_monotonically_non_increasing(synthetic_signal):
     signal, sr = synthetic_signal
     decay = energy_decay(signal, sr)
     diffs = np.diff(decay)
     assert np.all(diffs <= 1e-9)
 
-
 def test_energy_decay_uses_log10_not_natural_log(synthetic_signal):
     signal, sr = synthetic_signal
     decay = energy_decay(signal, sr)
-    # every value should be <= 0 dB (curve is normalized to its own peak)
     assert np.all(decay <= 1e-9)
 
+def test_lundeby_correction_synthetic_noise_floor(signal_with_noise_floor):
+    signal, sr = signal_with_noise_floor
+    decay_db, t_cross, noise_floor_db = lundeby_correction(signal, sr)
+    assert len(decay_db) == len(signal)
+    assert t_cross > 0.0
+    assert noise_floor_db < -15.0
+
+def test_calculate_room_modes_known_dimensions(synthetic_signal):
+    signal, sr = synthetic_signal
+    length, width, height = 6.0, 4.0, 3.0
+    res = calculate_room_modes(signal, sr, length_m=length, width_m=width, height_m=height)
+    assert res["status"] == "success"
+    assert res["schroeder_freq"] > 0
+    assert len(res["modes"]) > 0
+
+    # Lowest axial modes: (1,0,0) => 343 / (2*6) = 28.58 Hz
+    mode_100 = next(m for m in res["modes"] if m["indices"] == [1, 0, 0])
+    assert mode_100["frequency"] == pytest.approx(28.58, abs=0.1)
+    assert mode_100["type"] == "axial"
+
+    # (1,1,0) => 343/2 * sqrt(1/36 + 1/16) = 51.52 Hz
+    mode_110 = next(m for m in res["modes"] if m["indices"] == [1, 1, 0])
+    assert mode_110["type"] == "tangential"
+
+def test_calculate_waterfall(synthetic_signal):
+    signal, sr = synthetic_signal
+    wf = calculate_waterfall(signal, sr, target_points=20)
+    assert wf["status"] == "success"
+    assert len(wf["time_points"]) == 20
+    assert "500" in wf["bands"]
+    assert len(wf["bands"]["500"]) == 20
 
 def test_bandpass_rejects_invalid_edges():
     sr = 44100
@@ -95,14 +149,11 @@ def test_fft_output_shapes_match(synthetic_signal):
     assert len(amp) == len(signal)
     assert len(freq) == len(signal)
 
-
 def test_fft_max_frequency_is_nyquist(synthetic_signal):
     signal, sr = synthetic_signal
     amp, freq = get_fft(signal, sr)
     assert np.max(freq) == pytest.approx(sr / 2, rel=0.01)
 
-
-# does find_onset() actually finds the clap, within a small tolerance
 def test_find_onset_locates_clap_after_leading_noise(signal_with_leading_noise):
     signal , sr, true_onset = signal_with_leading_noise
     detected_onset = find_onset(signal)
@@ -123,118 +174,100 @@ def test_extract_impulse_response_removes_leading_noise(signal_with_leading_nois
     signal, sr, true_onset = signal_with_leading_noise
     extracted = extract_impulse_response(signal, sr)
     assert len(extracted) < len(signal)
-    assert len(extracted) == pytest.approx(len(signal) - true_onset, abs = int(0.01 * sr))
+    assert len(extracted) == pytest.approx(len(signal) - true_onset, abs=int(0.01 * sr))
 
 def test_extract_impulse_response_starts_near_peak(signal_with_leading_noise):
-    signal, sr ,_ = signal_with_leading_noise
+    signal, sr, _ = signal_with_leading_noise
     extracted = extract_impulse_response(signal, sr)
     peak_idx_in_extracted = np.argmax(np.abs(extracted))
-    assert peak_idx_in_extracted < int(0.01*sr)
+    assert peak_idx_in_extracted < int(0.01 * sr)
 
 # ---------- clarity_index / definition_index ----------
 
 @pytest.fixture
 def early_dominant_ir():
-    """A synthetic impulse response where nearly all the energy arrives early."""
     sr = 44100
-    ir = np.zeros(sr)  # 1 second
-    ir[0] = 1.0  # big early spike
-    ir[int(0.02 * sr)] = 0.2  # small early reflection, still within 50ms
-    ir[int(0.3 * sr)] = 0.05  # tiny late reflection
+    ir = np.zeros(sr)
+    ir[0] = 1.0
+    ir[int(0.02 * sr)] = 0.2
+    ir[int(0.3 * sr)] = 0.05
     return ir, sr
-
 
 @pytest.fixture
 def late_dominant_ir():
-    """A synthetic impulse response where most of the energy arrives late."""
     sr = 44100
     ir = np.zeros(sr)
-    ir[0] = 0.05  # tiny early spike
-    ir[int(0.3 * sr)] = 1.0  # dominant late reflection
+    ir[0] = 0.05
+    ir[int(0.3 * sr)] = 1.0
     ir[int(0.5 * sr)] = 0.8
     return ir, sr
-
 
 def test_clarity_index_positive_for_early_dominant_signal(early_dominant_ir):
     ir, sr = early_dominant_ir
     c50 = clarity_index(ir, sr, time_ms=50)
     assert c50 > 0
 
-
 def test_clarity_index_negative_for_late_dominant_signal(late_dominant_ir):
     ir, sr = late_dominant_ir
     c50 = clarity_index(ir, sr, time_ms=50)
     assert c50 < 0
 
-
 def test_clarity_index_raises_when_no_late_energy():
     sr = 44100
     ir = np.zeros(int(0.1 * sr))
-    ir[0] = 1.0  # all energy is before the 80ms cutoff, so "late" energy is 0
+    ir[0] = 1.0
     with pytest.raises(ValueError):
         clarity_index(ir, sr, time_ms=80)
-
 
 def test_definition_index_is_between_0_and_100(early_dominant_ir):
     ir, sr = early_dominant_ir
     d50 = definition_index(ir, sr, time_ms=50)
     assert 0 <= d50 <= 100
 
-
 def test_definition_index_high_for_early_dominant_signal(early_dominant_ir):
     ir, sr = early_dominant_ir
     d50 = definition_index(ir, sr, time_ms=50)
-    assert d50 > 90  # nearly all energy is within the first 50ms
-
+    assert d50 > 90
 
 def test_definition_index_low_for_late_dominant_signal(late_dominant_ir):
     ir, sr = late_dominant_ir
     d50 = definition_index(ir, sr, time_ms=50)
-    assert d50 < 10  # nearly all energy arrives after 50ms
-
+    assert d50 < 10
 
 def test_definition_index_rejects_silent_signal():
     silent = np.zeros(1000)
     with pytest.raises(ValueError):
         definition_index(silent, 44100, time_ms=50)
 
-
-# ---------- estimate_rt60 (week 4) ----------
+# ---------- estimate_rt60 ----------
 
 @pytest.fixture
 def synthetic_decay_curve():
-    """A perfectly linear decay curve: -20 dB/second, known RT60 = 3 seconds."""
     sr = 1000
     duration_s = 2.0
     time = np.arange(int(duration_s * sr)) / sr
-    decay_db = -20.0 * time  # slope of -20 dB/s => RT60 = 60/20 = 3s
+    decay_db = -20.0 * time
     return decay_db, time
-
 
 def test_estimate_rt60_recovers_known_slope(synthetic_decay_curve):
     decay_db, time = synthetic_decay_curve
     result = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
     assert result["rt60_seconds"] == pytest.approx(3.0, rel=0.01)
 
-
 def test_estimate_rt60_r_squared_is_near_1_for_perfect_line(synthetic_decay_curve):
     decay_db, time = synthetic_decay_curve
     result = estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
     assert result["r_squared"] == pytest.approx(1.0, abs=1e-6)
 
-
 def test_estimate_rt60_rejects_mismatched_lengths():
     with pytest.raises(ValueError):
         estimate_rt60(np.zeros(10), np.zeros(5))
 
-
 def test_estimate_rt60_rejects_flat_curve():
-    # a curve that never actually decays across the requested dB window
     decay_db = np.zeros(100)
     time = np.arange(100) / 100
     with pytest.raises(ValueError):
         estimate_rt60(decay_db, time, db_start=-5, db_end=-25)
-
 
 # ---------- audio_utils.py ----------
 
@@ -244,21 +277,19 @@ def test_downsample_for_preview_respects_target_points(synthetic_signal):
     assert len(time) == 500
     assert len(amplitude) == 500
 
-
 def test_downsample_for_preview_short_signal_returns_full_signal():
     sr = 100
     signal = np.random.randn(50)
     time, amplitude = downsample_for_preview(signal, sr, target_points=2000)
     assert len(amplitude) == 50
 
-# ---------- app.py ----------
+# ---------- app.py endpoints ----------
 
 @pytest.fixture
 def client():
     from app import app
     app.config["TESTING"] = True
     return app.test_client()
-
 
 def test_upload_endpoint_returns_waveform(client):
     with open(FIXTURE_PATH, "rb") as f:
@@ -272,11 +303,9 @@ def test_upload_endpoint_returns_waveform(client):
     assert "waveform_preview" in data
     assert len(data["waveform_preview"]["amplitude"]) == 2000
 
-
 def test_upload_endpoint_no_file_returns_400(client):
     resp = client.post("/upload", data={}, content_type="multipart/form-data")
     assert resp.status_code == 400
-
 
 def test_upload_endpoint_corrupt_file_returns_400(client):
     import io
@@ -285,7 +314,6 @@ def test_upload_endpoint_corrupt_file_returns_400(client):
         content_type="multipart/form-data"
     )
     assert resp.status_code == 400
-
 
 def test_energydecay_endpoint(client):
     with open(FIXTURE_PATH, "rb") as f:
@@ -296,7 +324,6 @@ def test_energydecay_endpoint(client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["decay_db"][0] == pytest.approx(0.0, abs=1e-6)
-
 
 def test_octavebands_endpoint_returns_all_expected_bands(client):
     with open(FIXTURE_PATH, "rb") as f:
@@ -309,7 +336,6 @@ def test_octavebands_endpoint_returns_all_expected_bands(client):
     for band in OCTAVE_BANDS:
         assert str(band) in data["bands"]
 
-
 def test_fft_endpoint(client):
     with open(FIXTURE_PATH, "rb") as f:
         resp = client.post(
@@ -319,3 +345,55 @@ def test_fft_endpoint(client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert len(data["amplitude"]) == len(data["frequencies"])
+
+def test_treatment_endpoint_returns_extended_metrics(client):
+    with open(FIXTURE_PATH, "rb") as f:
+        resp = client.post(
+            "/treatment",
+            data={
+                "audio": (f, "synthetic_clap.wav"),
+                "room_type": "classroom",
+                "volume_m3": "120",
+                "material": "acoustic_panel"
+            },
+            content_type="multipart/form-data"
+        )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "r_squared_T20" in data
+    assert "C50" in data
+    assert "points" in data
+    assert len(data["points"]) > 0
+    assert data["lundeby_corrected"] is True
+
+def test_roommodes_endpoint(client):
+    with open(FIXTURE_PATH, "rb") as f:
+        resp = client.post(
+            "/roommodes",
+            data={
+                "audio": (f, "synthetic_clap.wav"),
+                "length_m": "6.0",
+                "width_m": "4.0",
+                "height_m": "3.0"
+            },
+            content_type="multipart/form-data"
+        )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert "modes" in data
+    assert "schroeder_freq" in data
+    assert "fft" in data
+
+def test_waterfall_endpoint(client):
+    with open(FIXTURE_PATH, "rb") as f:
+        resp = client.post(
+            "/waterfall",
+            data={"audio": (f, "synthetic_clap.wav")},
+            content_type="multipart/form-data"
+        )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert "time_points" in data
+    assert "bands" in data

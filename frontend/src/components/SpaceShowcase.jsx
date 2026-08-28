@@ -4,29 +4,29 @@ import { Mic, Music, Tv, Briefcase, Activity, CheckCircle2 } from 'lucide-react'
 export default function SpaceShowcase({ onSelectSpace }) {
   const spaces = [
     {
-      id: 'studio',
+      id: 'recording_studio',
       title: 'Music & Recording Studio',
       subtitle: 'Critical Listening & Tracking',
       description:
         'Tuned for pristine frequency linearity, tight low-frequency decay, and controlled early reflections for accurate mixing and mastering.',
-      rt60Range: '0.3s — 0.5s',
+      rt60Range: '0.2s — 0.4s',
       icon: Music,
       accent: '#667a65',
       badge: 'Critical Audio',
     },
     {
-      id: 'cinema',
+      id: 'home_theater',
       title: 'Home Cinema & Theater',
       subtitle: 'Immersive Surround Experience',
       description:
         'Optimized for Dolby Atmos multichannel localization, speech dialogue clarity, and powerful, un-muddy bass response.',
-      rt60Range: '0.4s — 0.6s',
+      rt60Range: '0.2s — 0.4s',
       icon: Tv,
       accent: '#e5b364',
       badge: 'Surround Sound',
     },
     {
-      id: 'podcast',
+      id: 'podcast_booth',
       title: 'Podcast & Vocal Booth',
       subtitle: 'Dry & Articulate Voice Clarity',
       description:
@@ -42,7 +42,7 @@ export default function SpaceShowcase({ onSelectSpace }) {
       subtitle: 'Speech Privacy & Focus',
       description:
         'Meets ISO 3382-3 open-plan and conference acoustic standards to prevent fatigue, reduce reverberation, and boost conversational intelligibility.',
-      rt60Range: '0.6s — 0.8s',
+      rt60Range: '0.4s — 0.5s',
       icon: Briefcase,
       accent: '#93a891',
       badge: 'ISO 3382 Certified',

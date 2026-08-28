@@ -39,6 +39,12 @@
       "acceptable_range_seconds": [0.2, 0.4],
       "source": "architectural_acoustics_practice - small studio/control room mid-frequency target, 0.2-0.4s"
     },
+    "podcast_booth": {
+      "label": "Podcast & Vocal Booth",
+      "target_rt60_seconds": 0.28,
+      "acceptable_range_seconds": [0.2, 0.35],
+      "source": "architectural_acoustics_practice - dry vocal-booth target for minimal flutter echo, 0.2-0.35s"
+    },
     "concert_hall": {
       "label": "Concert Hall",
       "target_rt60_seconds": 1.8,
