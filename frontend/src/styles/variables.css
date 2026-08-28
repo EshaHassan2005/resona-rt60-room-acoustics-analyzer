@@ -1,0 +1,31 @@
+:root {
+  /* Brand Palette */
+  --bg-black-forest: #121813;
+  --bg-dark-forest: #27362a;
+  --bg-olive-forest: #283d29;
+  --bg-deep-moss: #1b261c;
+  --color-sage: #667a65;
+  --color-muted-sage: #636d5e;
+  --color-light-sage: #93a891;
+  --color-cream: #fffafe;
+  --color-text-dim: #c5d1c4;
+  --color-text-muted: #95a593;
+  --color-accent-amber: #e5b364;
+  --color-accent-emerald: #4ade80;
+
+  /* Glassmorphism & Borders */
+  --glass-bg: rgba(39, 54, 42, 0.75);
+  --glass-card: rgba(40, 61, 41, 0.65);
+  --glass-card-hover: rgba(50, 75, 51, 0.85);
+  --glass-border: rgba(255, 250, 254, 0.14);
+  --glass-border-bright: rgba(255, 250, 254, 0.28);
+  --card-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --font-family: 'Raleway', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --letter-spacing-wide: 0.18em;
+  --letter-spacing-tight: -0.02em;
+
+  /* Transitions */
+  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
