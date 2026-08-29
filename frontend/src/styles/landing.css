@@ -27,6 +27,11 @@ button {
   outline: none;
 }
 
+button:hover
+{
+  opacity: .7;
+}
+
 /* Container */
 .container {
   max-width: 1240px;
@@ -188,9 +193,9 @@ button {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(18, 24, 19, 0.72) 0%,
+    rgba(25, 35, 27, 0.72) 0%,
     rgba(39, 54, 42, 0.82) 50%,
-    rgba(18, 24, 19, 0.95) 100%
+    rgba(24, 32, 25, 0.95) 100%
   );
   z-index: 1;
 }
@@ -260,7 +265,7 @@ button {
 }
 
 .btn-pill-primary:hover {
-  background: #ffffff;
+  background: #FFFAFD;
   transform: translateY(-2px);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
 }
@@ -424,9 +429,9 @@ button {
 
 .what-we-do-image-wrapper {
   position: relative;
-  border-radius: 16px;
+  opacity: .6;
+  border-radius: 9px;
   overflow: hidden;
-  border: 1px solid var(--glass-border-bright);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
 }
 

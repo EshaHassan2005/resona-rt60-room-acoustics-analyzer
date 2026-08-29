@@ -1,5 +1,5 @@
 import React from 'react';
-import whatWeDoImg from '../assets/what-we-do.jpg';
+import whatWeDoImg from '../assets/what-we-do.png';
 import { Activity, Sliders } from 'lucide-react';
 
 export default function WhatWeDoSection({ onOpenRT60Info }) {
@@ -8,7 +8,7 @@ export default function WhatWeDoSection({ onOpenRT60Info }) {
       <div className="container">
         <div className="what-we-do-grid">
           {/* Left Text Column */}
-          <div className="what-we-do-content">
+          <div className="what-we-do-content" >
             <h2 className="what-we-do-title">WHAT WE DO</h2>
 
             <div className="what-we-do-text">

@@ -1,5 +1,5 @@
 import React from 'react';
-import counselorBg from '../assets/counselor-bg.jpg';
+import counselorBg from '../assets/classroom.png';
 import { Volume2, Sparkles, UserCheck } from 'lucide-react';
 
 export default function CounselorSection({ onOpenContact }) {

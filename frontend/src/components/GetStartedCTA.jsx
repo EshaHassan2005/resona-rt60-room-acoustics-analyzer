@@ -26,7 +26,7 @@ export default function GetStartedCTA({ onOpenAnalyzer }) {
           <button
             className="btn-pill-primary"
             onClick={onOpenAnalyzer}
-            style={{ fontSize: '0.95rem', padding: '16px 42px' }}
+            style={{ fontSize: '0.95rem', padding: '16px 42px',fontWeight:'900',boxShadow:'none' }}
           >
             TRY OUT OUR GENERATOR
           </button>

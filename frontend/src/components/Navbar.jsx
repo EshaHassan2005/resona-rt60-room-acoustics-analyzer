@@ -8,7 +8,7 @@ export default function Navbar({ onOpenAnalyzer, onOpenRT60Info, onOpenContact }
     <nav className="navbar">
       <div className="container navbar-inner">
         {/* Brand Logo & Slogan */}
-        <div className="nav-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+        <div className="nav-brand"  style={{color:'#27362A'}} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} >
           <div className="brand-logo-icon">
             <span></span>
             <span></span>
@@ -17,9 +17,8 @@ export default function Navbar({ onOpenAnalyzer, onOpenRT60Info, onOpenContact }
             <span></span>
             <span></span>
           </div>
-          <span className="brand-title">RESONA</span>
-          <span className="nav-slogan" style={{ marginLeft: '12px' }}>
-            find and create your own space with us
+          <span className="nav-slogan" style={{ marginLeft: '45px',paddingLeft:'310px',opacity:'.7' }}>
+            Find and create your own space with us
           </span>
         </div>
 
@@ -28,14 +27,6 @@ export default function Navbar({ onOpenAnalyzer, onOpenRT60Info, onOpenContact }
           <li><a href="#what-we-do">What We Do</a></li>
           <li><a href="#spaces">Spaces</a></li>
           <li><a href="#counselors" onClick={(e) => { e.preventDefault(); onOpenContact(); }}>Counselors</a></li>
-          <li>
-            <button
-              className="nav-cta-btn"
-              onClick={onOpenAnalyzer}
-            >
-              TRY GENERATOR
-            </button>
-          </li>
         </ul>
 
         {/* Mobile Hamburger Toggle */}
