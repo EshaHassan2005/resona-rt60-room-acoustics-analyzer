@@ -20,6 +20,8 @@ import {
   Volume2
 } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const ROOM_TYPES_CONFIG = {
   classroom: { label: 'Classroom', desc: 'Core learning spaces & speech clarity (ANSI S12.60)', target: 0.60 },
   recording_studio: { label: 'Recording Studio', desc: 'Mixing control room & vocal tracking (0.20 - 0.40s)', target: 0.30 },
@@ -245,7 +247,7 @@ export default function AnalyzerModal({ isOpen, onClose, initialRoomType = 'reco
         formData.append('width_m', widthM);
         formData.append('height_m', heightM);
 
-        const treatmentRes = await fetch('http://localhost:5000/treatment', {
+        const treatmentRes = await fetch(`${API_BASE_URL}/treatment`, {
           method: 'POST',
           body: formData
         });
@@ -260,7 +262,7 @@ export default function AnalyzerModal({ isOpen, onClose, initialRoomType = 'reco
 
         // Attempt /roommodes & /waterfall if audio file is attached
         if (file) {
-          const roomModeRes = await fetch('http://localhost:5000/roommodes', {
+          const roomModeRes = await fetch(`${API_BASE_URL}/roommodes`, {
             method: 'POST',
             body: formData
           });
@@ -269,7 +271,7 @@ export default function AnalyzerModal({ isOpen, onClose, initialRoomType = 'reco
             setRoomModeData(rmJson);
           }
 
-          const wfRes = await fetch('http://localhost:5000/waterfall', {
+          const wfRes = await fetch(`${API_BASE_URL}/waterfall`, {
             method: 'POST',
             body: formData
           });
