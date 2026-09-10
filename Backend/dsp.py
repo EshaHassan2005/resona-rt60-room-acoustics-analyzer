@@ -159,33 +159,87 @@ def get_fft(signal:np.ndarray,sample_rate: int):
     return (np.abs(fft_result),frequencies)
 
 
-def find_onset(signal: np.ndarray, threshold_db: float = 20.0) -> int:
-    # getting the peak location and value
-
+def _global_peak_onset(signal: np.ndarray, threshold_db: float = 20.0) -> int:
+    """Original strategy: loudest sample = clap. Kept as fallback for
+    very short signals where frame-based stats aren't meaningful."""
     peak_idx = np.argmax(np.abs(signal))
     peak_val = np.abs(signal[peak_idx])
-
-    # a check (if theres no real clap to detect)
-
     if peak_val <= 0:
         raise ValueError("Signal has no measurable energy")
-
-    # computing the actual thresold amplitude
-    # we know the peak(loudest point) is say 1.0(i assumed).. want to say anything quiter than 20dB below that peak counts as silence/bg noise
-    # so converting 20 dB into a fraction of "1.0" to actually compare
-    thresold = peak_val * (10 ** (-threshold_db/20))
-    below_threshold = np.abs(signal[:peak_idx + 1]) < thresold 
-
-    # quiet samples before the clap takes off
+    thresold = peak_val * (10 ** (-threshold_db / 20))
+    below_threshold = np.abs(signal[:peak_idx + 1]) < thresold
     quiet_indices = np.where(below_threshold)[0]
+    return (quiet_indices[-1] + 1) if len(quiet_indices) > 0 else 0
 
-    onset_idx = (quiet_indices[-1]+1) if len(quiet_indices)>0 else 0
-    return onset_idx
 
+def find_onset(
+    signal: np.ndarray,
+    sample_rate: int,
+    threshold_db: float = 20.0,
+    frame_ms: float = 5.0,
+    sustain_ms: float = 50.0,
+    sustain_margin_db: float = 6.0,
+) -> int:
+    if len(signal) == 0 or np.max(np.abs(signal)) <= 0:
+        raise ValueError("Signal has no measurable energy")
+
+    frame_len = max(1, int(sample_rate * frame_ms / 1000))
+    n_frames = len(signal) // frame_len
+
+    if n_frames < 6:
+        return _global_peak_onset(signal, threshold_db)
+
+    trimmed = signal[: n_frames * frame_len].reshape(n_frames, frame_len)
+    frame_peak = np.max(np.abs(trimmed), axis=1)
+    frame_peak_db = 20 * np.log10(np.maximum(frame_peak, 1e-12))
+    frame_rms = np.sqrt(np.mean(trimmed ** 2, axis=1))
+    frame_rms_db = 20 * np.log10(np.maximum(frame_rms, 1e-12))
+
+    noise_floor_db = float(np.median(frame_rms_db))
+
+    candidate_frames = np.where(frame_peak_db > noise_floor_db + threshold_db)[0]
+    if len(candidate_frames) == 0:
+        raise ValueError(
+            "Could not find a clap clearly above the background noise floor - "
+            "the recording may be too noisy, or the clap too quiet, to isolate."
+        )
+
+    sustain_frames = max(1, int(sustain_ms / frame_ms))
+    valid_frames = []
+    for idx in candidate_frames:
+        end = min(n_frames, idx + sustain_frames)
+        following_db = frame_rms_db[idx:end]
+        if len(following_db) == 0:
+            continue
+        if np.mean(following_db) > noise_floor_db + sustain_margin_db:
+            valid_frames.append(idx)
+
+    if not valid_frames:
+        raise ValueError(
+            "Found a loud moment in the recording, but nothing with a "
+            "decaying reverb tail after it - it may be background noise "
+            "rather than a clap. Try a louder, more isolated clap."
+        )
+
+    onset_frame = valid_frames[0]
+
+    window_start = max(0, (onset_frame - 1) * frame_len)
+    window_end = min(len(signal), (onset_frame + sustain_frames) * frame_len)
+    local = signal[window_start:window_end]
+
+    local_peak_idx = int(np.argmax(np.abs(local)))
+    noise_floor_lin = 10 ** (noise_floor_db / 20)
+    rise_threshold = noise_floor_lin * (10 ** (threshold_db / 20)) * 0.5
+
+    below = np.abs(local[: local_peak_idx + 1]) < rise_threshold
+    quiet_indices = np.where(below)[0]
+    local_onset = (quiet_indices[-1] + 1) if len(quiet_indices) > 0 else 0
+
+    return window_start + local_onset
 
 def extract_impulse_response(signal: np.ndarray, sample_rate: int, threshold_db: float = 20.0)-> np.ndarray:
 
-    onset_idx = find_onset(signal, threshold_db)
+    onset_idx = find_onset(signal, sample_rate, threshold_db)
     return signal[onset_idx:]
 
 def clarity_index(impulse_response: np.ndarray, sample_rate: int, time_ms: float) -> float:

@@ -50,6 +50,35 @@ def signal_with_leading_noise():
     return signal, sr, true_onset
 
 @pytest.fixture
+def noisy_classroom_signal():
+    """
+    Simulates a real classroom take: a raised ambient noise floor
+    throughout (chatter/HVAC), plus a single stray noise burst (e.g. a
+    chair scrape) that is louder than the actual clap but has no
+    reverb tail following it, then the real clap + decay.
+    """
+    sr = 44100
+    rng = np.random.default_rng(3)
+
+    total_len = int(1.2 * sr)
+    signal = rng.normal(0, 0.03, total_len)  # ambient classroom noise floor
+
+    # Stray noise burst at 0.3s: louder than the clap, but brief (no decay tail)
+    stray_idx = int(0.3 * sr)
+    signal[stray_idx:stray_idx + 20] += rng.normal(0, 1.0, 20)
+
+    # The real clap at 0.7s, with a proper decaying reverb tail after it
+    true_onset = int(0.7 * sr)
+    signal[true_onset] += 0.8
+    tail_len = min(int(0.4 * sr), total_len - true_onset - 1)
+    t = np.arange(tail_len) / sr
+    tail = np.exp(-t * 8.0) * rng.normal(0, 0.15, tail_len)
+    signal[true_onset + 1: true_onset + 1 + tail_len] += tail
+
+    return signal, sr, true_onset
+
+
+@pytest.fixture
 def signal_with_noise_floor():
     sr = 44100
     rng = np.random.default_rng(42)
@@ -156,19 +185,42 @@ def test_fft_max_frequency_is_nyquist(synthetic_signal):
 
 def test_find_onset_locates_clap_after_leading_noise(signal_with_leading_noise):
     signal , sr, true_onset = signal_with_leading_noise
-    detected_onset = find_onset(signal)
+    detected_onset = find_onset(signal, sr)
     assert detected_onset == pytest.approx(true_onset, abs = int(0.01*sr))
 
 
 def test_find_onset_on_signal_with_no_leading_noise(synthetic_signal):
     signal, sr = synthetic_signal
-    onset = find_onset(signal)
+    onset = find_onset(signal, sr)
     assert onset < int(0.01*sr)
 
 def test_find_onset_rejects_silent_signal():
     silent = np.zeros(1000)
     with pytest.raises(ValueError):
-        find_onset(silent)
+        find_onset(silent, 44100)
+
+
+def test_find_onset_ignores_louder_stray_noise_before_clap(noisy_classroom_signal):
+    """
+    Regression test for the classroom-recording bug: a stray noise
+    (chair scrape / door / cough) that is LOUDER than the actual clap,
+    plus a raised ambient noise floor throughout. The old global-peak
+    strategy would lock onto the stray noise; this should still find
+    the real clap because it's the one followed by a decay tail.
+    """
+    signal, sr, true_onset = noisy_classroom_signal
+    detected_onset = find_onset(signal, sr)
+    assert detected_onset == pytest.approx(true_onset, abs=int(0.01 * sr))
+
+
+def test_find_onset_raises_when_nothing_rises_above_noise_floor():
+    sr = 44100
+    rng = np.random.default_rng(7)
+    # Pure background noise, no clap anywhere - should fail clearly
+    # instead of silently returning onset_idx = 0.
+    signal = rng.normal(0, 0.05, int(1.0 * sr))
+    with pytest.raises(ValueError):
+        find_onset(signal, sr)
 
 def test_extract_impulse_response_removes_leading_noise(signal_with_leading_noise):
     signal, sr, true_onset = signal_with_leading_noise
