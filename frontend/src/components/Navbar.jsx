@@ -17,6 +17,7 @@ export default function Navbar({ onOpenAnalyzer, onOpenRT60Info, onOpenContact }
             <span></span>
             <span></span>
           </div>
+          <span className='brandname' style={{opacity:'8',color:'#e7e2e2',fontWeight:'500'}}>RESONA</span>
           <span className="nav-slogan" style={{ marginLeft: '45px',paddingLeft:'310px',opacity:'.7' }}>
             Find and create your own space with us
           </span>

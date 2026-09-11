@@ -18,11 +18,12 @@ export default function HeroSection({ onOpenAbout, onOpenAnalyzer }) {
         <div style={{backgroundColor:'#FFFAFD',width:'750px',height:'2px',zIndex:'10',opacity:'.5',marginLeft:'-372px',marginBottom:'19px'}}></div>
 
         <p className="hero-description" style={{textAlign:'left',marginLeft:'-370px',marginBottom:'45px'}}>
-          Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium
-          doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore
-          veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim
-          ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia
-          consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+          Here at <span className="bolded" style={{fontWeight:'700'}}>Resona</span>, we accede to your acoustic demands via 
+          providing routes to dissecting, analyzing and tuning the auditory characteristics of your space. We have always 
+          coveted for the highest degree of customer satisfaction through utilizing the most recent and innovative methods available 
+          in the realm of sound technology. A space's acoustic character is what brings it to life and makes the 
+          audience feel engulfed in whatever melody the space decides to convey. Start your journey with us via learning 
+          more about what we do.
         </p>
 
         <div className="hero-actions">

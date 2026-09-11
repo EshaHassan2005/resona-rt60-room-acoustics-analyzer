@@ -20,7 +20,7 @@ import {
   Volume2
 } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:5000' || import.meta.env.VITE_API_URL ;
 
 const ROOM_TYPES_CONFIG = {
   classroom: { label: 'Classroom', desc: 'Core learning spaces & speech clarity (ANSI S12.60)', target: 0.60 },

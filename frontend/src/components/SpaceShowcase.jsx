@@ -53,7 +53,7 @@ export default function SpaceShowcase({ onSelectSpace }) {
     <section className="showcase-section" id="spaces">
       <div className="container">
         <div className="section-header">
-          <p className="section-tag">YOU DO YOU</p>
+          <p className="section-tag">BUILD YOUR OWN EDEN</p>
           <h2 className="section-title">Acoustic Precision For Every Room</h2>
         </div>
 

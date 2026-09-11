@@ -26,12 +26,10 @@ export default function CounselorSection({ onOpenContact }) {
           </div>
 
           <p className="counselor-text">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam eu
-            finibus nibh. Maecenas velit est, sagittis non iaculis nec, posuere eget
-            ante. Aliquam erat volutpat. Aliquam semper ex ut turpis porta
-            suscipit. Duis sit amet maximus enim. Mauris magna ipsum, interdum eu
-            lacus ac, iaculis blandit justo. Donec semper est odio, nec efficitur
-            nunc accumsan quis. Mauris interdum at justo sed euismod.
+            Our principles are rooted in helping you find solace in what we provide as proposition 
+            to your acoustic needs. To achieve our goals, we have hired the best audio consultants who 
+            have been deemed as  <span style={{fontStyle:'italic'}}> cream of the crop </span> in the field of sonic analysis. So feel free 
+            to let your imagination run wild and let our staff bring them to life.
           </p>
 
           <button

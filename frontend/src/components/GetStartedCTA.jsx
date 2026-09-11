@@ -1,5 +1,7 @@
 import React from 'react';
 import { Activity, Play, Zap } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
 
 export default function GetStartedCTA({ onOpenAnalyzer }) {
   return (
@@ -11,16 +13,10 @@ export default function GetStartedCTA({ onOpenAnalyzer }) {
           </h2>
 
           <p className="get-started-text">
-            Pellentesque sed odio tempor tortor facilisis suscipit sit amet justo.
-            Phasellus tempor, nunc vitae luctus euismod, leo diam tempor justo, id
-            euismod dolor odio non nunc. Sed massa dolor, malesuada blandit urna nec,
-            tempus egestas est. Phasellus ut sagittis libero. Donec varius, mi et
-            gravida tempus, lacus lacus consequat justo, et porta sapien ipsum at
-            elit. Proin vel erat nec ante commodo auctor. Curabitur ultricies leo
-            arcu at posuere. Suspendisse sagittis diam sit amet augue mollis, in
-            feugiat elit dictum. Praesent ultrices egestas est ut efficitur.
-            Vestibulum sodales tellus eros, a dictum mi imperdiet sit amet. Duis
-            consectetur sit amet diam quis commodo.
+            With our generator, find the RT60 of your space and understand how different components add up 
+            to whipping up an audio profile of a given zone. Please consult with an audio engineer as some 
+            of the results provided can be difficult to comprehend if you haven't dipped in the audio field 
+            before. You can easily contact one of our consultants via navigating to the counselor's section.
           </p>
 
           <button
