@@ -1,6 +1,8 @@
 import os
-os.environ.setdefault("NUMBA_DISABLE_JIT", "1")
 os.environ.setdefault("NUMBA_CACHE_DIR", "/tmp/numba_cache")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
 from flask import Flask,request,jsonify
 from flask_cors import CORS
