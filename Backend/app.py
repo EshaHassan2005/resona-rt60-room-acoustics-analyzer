@@ -1,3 +1,11 @@
+import os
+os.environ.setdefault("NUMBA_DISABLE_JIT", "1")
+os.environ.setdefault("NUMBA_CACHE_DIR", "/tmp/numba_cache")
+
+from flask import Flask,request,jsonify
+from flask_cors import CORS
+# ...rest of your existing imports stay exactly as they were
+
 from flask import Flask,request,jsonify
 from flask_cors import CORS
 
