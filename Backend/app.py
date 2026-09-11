@@ -19,7 +19,14 @@ from scipy import stats
 import numpy as np
 
 app=Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:5173",
+            "https://resona-rt60-room-acoustics-analyzer.vercel.app"
+        ]
+    }
+})
 
 PREVIEW_POINTS = 2000
 
