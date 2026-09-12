@@ -19,13 +19,14 @@ export default function GetStartedCTA({ onOpenAnalyzer }) {
             before. You can easily contact one of our consultants via navigating to the counselor's section.
           </p>
 
-          <button
+          <Link
+            to="/generator"
             className="btn-pill-primary"
+            style={{ fontSize: '0.95rem', padding: '16px 42px', fontWeight: '900', boxShadow: 'none', display: 'inline-block', textAlign: 'center' }}
             onClick={onOpenAnalyzer}
-            style={{ fontSize: '0.95rem', padding: '16px 42px',fontWeight:'900',boxShadow:'none' }}
           >
             TRY OUT OUR GENERATOR
-          </button>
+          </Link>
         </div>
       </div>
     </section>
