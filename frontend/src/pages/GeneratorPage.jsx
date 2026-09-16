@@ -390,13 +390,11 @@ export default function GeneratorPage() {
       setActiveTab('all');
     }
 
-    // Try real backend calls unless simulation mode is explicitly enabled
-    if (!isSimMode) {
+    // If an audio file is uploaded and simulation mode is not enabled, call the real Python DSP backend
+    if (file && !isSimMode) {
       try {
         const formData = new FormData();
-        if (file) {
-          formData.append('audio', file);
-        }
+        formData.append('audio', file);
         formData.append('volume_m3', volumeM3);
         formData.append('room_type', roomType);
         formData.append('material', material);
@@ -629,20 +627,26 @@ export default function GeneratorPage() {
   };
 
   return (
-    <div className="generator-page">
+    <div className={`generator-page ${isAnalyzing ? 'generator-running' : ''}`}>
       {/* Top Standalone Page Header */}
       <header className="generator-navbar">
         <div className="container generator-navbar-inner">
           <div className="generator-nav-left">
             <button
               className="btn-back-home"
-              onClick={() => navigate('/')}
+              onClick={() => !isAnalyzing && navigate('/')}
+              disabled={isAnalyzing}
               title="Return to Landing Page"
+              style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >
               <ArrowLeft size={18} />
               <span>Back to Home</span>
             </button>
-            <div className="generator-brand" onClick={() => navigate('/')}>
+            <div
+              className="generator-brand"
+              onClick={() => !isAnalyzing && navigate('/')}
+              style={isAnalyzing ? { cursor: 'not-allowed' } : { cursor: 'pointer' }}
+            >
               <div className="brand-logo-icon">
                 <span></span>
                 <span></span>
@@ -686,36 +690,48 @@ export default function GeneratorPage() {
           <div className="generator-tab-bar">
             <button
               className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveTab('all')}
-              style={activeTab === 'all' ? { borderColor: 'var(--color-accent-emerald)', background: 'rgba(74, 222, 128, 0.15)' } : {}}
+              onClick={() => !isAnalyzing && setActiveTab('all')}
+              disabled={isAnalyzing}
+              style={{
+                ...(activeTab === 'all' ? { borderColor: 'var(--color-accent-emerald)', background: 'rgba(74, 222, 128, 0.15)' } : {}),
+                ...(isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}),
+              }}
             >
               <Sparkles size={16} color="var(--color-accent-emerald)" />
               <span>✨ Do-It-All (All Spaces)</span>
             </button>
             <button
               className={`tab-btn ${activeTab === 'treatment' ? 'active' : ''}`}
-              onClick={() => setActiveTab('treatment')}
+              onClick={() => !isAnalyzing && setActiveTab('treatment')}
+              disabled={isAnalyzing}
+              style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >
               <Activity size={16} />
               <span>RT60 & Treatment</span>
             </button>
             <button
               className={`tab-btn ${activeTab === 'roommodes' ? 'active' : ''}`}
-              onClick={() => setActiveTab('roommodes')}
+              onClick={() => !isAnalyzing && setActiveTab('roommodes')}
+              disabled={isAnalyzing}
+              style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >
               <Grid size={16} />
               <span>Room Modes (FFT)</span>
             </button>
             <button
               className={`tab-btn ${activeTab === 'waterfall' ? 'active' : ''}`}
-              onClick={() => setActiveTab('waterfall')}
+              onClick={() => !isAnalyzing && setActiveTab('waterfall')}
+              disabled={isAnalyzing}
+              style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >
               <Layers size={16} />
               <span>3D Waterfall</span>
             </button>
             <button
               className={`tab-btn ${activeTab === 'clarity' ? 'active' : ''}`}
-              onClick={() => setActiveTab('clarity')}
+              onClick={() => !isAnalyzing && setActiveTab('clarity')}
+              disabled={isAnalyzing}
+              style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >
               <Sliders size={16} />
               <span>Speech & Music Clarity</span>
@@ -730,7 +746,10 @@ export default function GeneratorPage() {
               <select
                 className="form-select"
                 value={roomType}
+                disabled={isAnalyzing}
+                style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
                 onChange={(e) => {
+                  if (isAnalyzing) return;
                   const val = e.target.value;
                   setRoomType(val);
                   if (val === 'all') {
@@ -755,7 +774,9 @@ export default function GeneratorPage() {
                   className="form-input"
                   placeholder="L"
                   value={lengthM}
-                  onChange={(e) => setLengthM(Math.max(1, Number(e.target.value)))}
+                  disabled={isAnalyzing}
+                  style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+                  onChange={(e) => !isAnalyzing && setLengthM(Math.max(1, Number(e.target.value)))}
                   step="0.1"
                 />
                 <input
@@ -763,7 +784,9 @@ export default function GeneratorPage() {
                   className="form-input"
                   placeholder="W"
                   value={widthM}
-                  onChange={(e) => setWidthM(Math.max(1, Number(e.target.value)))}
+                  disabled={isAnalyzing}
+                  style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+                  onChange={(e) => !isAnalyzing && setWidthM(Math.max(1, Number(e.target.value)))}
                   step="0.1"
                 />
                 <input
@@ -771,7 +794,9 @@ export default function GeneratorPage() {
                   className="form-input"
                   placeholder="H"
                   value={heightM}
-                  onChange={(e) => setHeightM(Math.max(1, Number(e.target.value)))}
+                  disabled={isAnalyzing}
+                  style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+                  onChange={(e) => !isAnalyzing && setHeightM(Math.max(1, Number(e.target.value)))}
                   step="0.1"
                 />
               </div>
@@ -786,7 +811,9 @@ export default function GeneratorPage() {
               <select
                 className="form-select"
                 value={material}
-                onChange={(e) => setMaterial(e.target.value)}
+                disabled={isAnalyzing}
+                style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+                onChange={(e) => !isAnalyzing && setMaterial(e.target.value)}
               >
                 {Object.entries(MATERIALS_CONFIG).map(([key, config]) => (
                   <option key={key} value={key}>
@@ -801,21 +828,30 @@ export default function GeneratorPage() {
           <div className="audio-source-container">
             {/* Dropzone */}
             <div
-              className={`dropzone ${fileName ? 'active' : ''}`}
-              onClick={() => fileInputRef.current?.click()}
+              className={`dropzone ${fileName ? 'active' : ''} ${isAnalyzing ? 'disabled' : ''}`}
+              onClick={() => {
+                if (isAnalyzing) return;
+                fileInputRef.current?.click();
+              }}
+              style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.55 } : {}}
             >
               <input
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 accept=".wav,.mp3,.flac,.ogg,.m4a"
+                disabled={isAnalyzing}
                 style={{ display: 'none' }}
               />
               <UploadCloud size={32} className="dropzone-icon" />
               {fileName ? (
                 <div style={{ position: 'relative', width: '100%' }}>
                   <button
-                    onClick={clearFile}
+                    onClick={(e) => {
+                      if (isAnalyzing) return;
+                      clearFile(e);
+                    }}
+                    disabled={isAnalyzing}
                     title="Remove audio file"
                     style={{
                       position: 'absolute',
@@ -829,7 +865,8 @@ export default function GeneratorPage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      cursor: 'pointer',
+                      cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                      opacity: isAnalyzing ? 0.5 : 1,
                       color: '#f87171',
                       padding: 0,
                       flexShrink: 0,
@@ -840,14 +877,14 @@ export default function GeneratorPage() {
                   <p className="dropzone-text" style={{ fontWeight: 700, color: 'var(--color-cream)' }}>
                     {fileName}
                   </p>
-                  <p className="dropzone-hint">Click to change audio file</p>
+                  <p className="dropzone-hint">{isAnalyzing ? 'Analysis in progress...' : 'Click to change audio file'}</p>
                 </div>
               ) : (
                 <div>
                   <p className="dropzone-text">
                     <strong>Upload impulse response</strong> (.wav, .mp3)
                   </p>
-                  <p className="dropzone-hint">Balloon pop, clap test, or acoustic sine sweep</p>
+                  <p className="dropzone-hint">{isAnalyzing ? 'Analysis in progress...' : 'Balloon pop, clap test, or acoustic sine sweep'}</p>
                 </div>
               )}
             </div>
@@ -863,7 +900,8 @@ export default function GeneratorPage() {
                   <button
                     className="mic-btn-record mic-btn-recording"
                     onClick={stopRecording}
-                    style={{ marginTop: '8px' }}
+                    disabled={isAnalyzing}
+                    style={{ marginTop: '8px', ...(isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}) }}
                   >
                     <Square size={14} /> STOP RECORDING
                   </button>
@@ -875,8 +913,9 @@ export default function GeneratorPage() {
                   </p>
                   <button
                     className="mic-btn-record"
-                    onClick={startRecording}
-                    style={{ marginTop: '8px' }}
+                    onClick={() => !isAnalyzing && startRecording()}
+                    disabled={isAnalyzing}
+                    style={{ marginTop: '8px', ...(isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}) }}
                   >
                     <Mic size={14} /> RECORD AUDIO
                   </button>
@@ -919,12 +958,13 @@ export default function GeneratorPage() {
               type="checkbox"
               id="simToggle"
               checked={isSimMode}
-              onChange={(e) => setIsSimMode(e.target.checked)}
-              style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+              disabled={isAnalyzing}
+              onChange={(e) => !isAnalyzing && setIsSimMode(e.target.checked)}
+              style={{ cursor: isAnalyzing ? 'not-allowed' : 'pointer', width: '16px', height: '16px' }}
             />
             <label
               htmlFor="simToggle"
-              style={{ fontSize: '0.84rem', color: 'var(--color-text-dim)', cursor: 'pointer' }}
+              style={{ fontSize: '0.84rem', color: 'var(--color-text-dim)', cursor: isAnalyzing ? 'not-allowed' : 'pointer' }}
             >
               Use Client-Side DSP Simulation Mode (Offline mode)
             </label>
@@ -942,7 +982,7 @@ export default function GeneratorPage() {
           <div style={{ marginTop: '16px', marginBottom: '24px' }}>
             <button
               className="btn-pill-primary"
-              onClick={runAnalysis}
+              onClick={() => !isAnalyzing && runAnalysis()}
               disabled={isAnalyzing}
               style={{
                 width: '100%',
@@ -951,6 +991,7 @@ export default function GeneratorPage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '10px',
+                cursor: isAnalyzing ? 'not-allowed' : 'pointer',
               }}
             >
               {isAnalyzing ? (
@@ -1145,7 +1186,10 @@ export default function GeneratorPage() {
 
                           <button
                             className="btn-space-focus"
+                            disabled={isAnalyzing}
+                            style={isAnalyzing ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
                             onClick={() => {
+                              if (isAnalyzing) return;
                               setRoomType(key);
                               setActiveTab('treatment');
                             }}
