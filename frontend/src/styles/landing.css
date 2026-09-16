@@ -1721,3 +1721,56 @@ select[disabled]:hover {
   box-shadow: 0 0 8px rgba(248, 113, 113, 0.8);
   z-index: 5;
 }
+
+.dynamic-explanation-card {
+  margin-top: 18px;
+  background: rgba(18, 24, 19, 0.75);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.dynamic-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-cream);
+  margin-bottom: 14px;
+}
+
+.dynamic-explanation-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.dynamic-sub-block {
+  background: rgba(40, 61, 41, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.dynamic-sub-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--color-light-sage);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dynamic-text {
+  font-size: 0.82rem;
+  color: var(--color-text-dim);
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .dynamic-explanation-grid {
+    grid-template-columns: 1fr;
+  }
+}

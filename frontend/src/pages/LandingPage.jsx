@@ -15,6 +15,7 @@ import ContactModal from '../components/ContactModal';
 import AboutModal from '../components/AboutModal';
 import SchroederModal from '../components/SchroederModal';
 import ISO3382Modal from '../components/ISO3382Modal';
+import RoomModesModal from '../components/RoomModesModal';
 import AcousticConsultingModal from '../components/AcousticConsultingModal';
 import StudioCinemaModal from '../components/StudioCinemaModal';
 import ArchitecturalModal from '../components/ArchitecturalModal';
@@ -27,6 +28,7 @@ export default function LandingPage() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isSchroederOpen, setIsSchroederOpen] = useState(false);
   const [isISO3382Open, setIsISO3382Open] = useState(false);
+  const [isRoomModesOpen, setIsRoomModesOpen] = useState(false);
   const [isConsultingOpen, setIsConsultingOpen] = useState(false);
   const [isStudioCinemaOpen, setIsStudioCinemaOpen] = useState(false);
   const [isArchitecturalOpen, setIsArchitecturalOpen] = useState(false);
@@ -64,6 +66,7 @@ export default function LandingPage() {
       <Footer
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenRT60Info={() => setIsRT60InfoOpen(true)}
+        onOpenRoomModes={() => setIsRoomModesOpen(true)}
         onOpenSchroeder={() => setIsSchroederOpen(true)}
         onOpenISO3382={() => setIsISO3382Open(true)}
         onOpenConsulting={() => setIsConsultingOpen(true)}
@@ -77,6 +80,7 @@ export default function LandingPage() {
       <RT60InfoModal isOpen={isRT60InfoOpen} onClose={() => setIsRT60InfoOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
       <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
+      <RoomModesModal isOpen={isRoomModesOpen} onClose={() => setIsRoomModesOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
       <SchroederModal isOpen={isSchroederOpen} onClose={() => setIsSchroederOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
       <ISO3382Modal isOpen={isISO3382Open} onClose={() => setIsISO3382Open(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
       <AcousticConsultingModal isOpen={isConsultingOpen} onClose={() => setIsConsultingOpen(false)} />

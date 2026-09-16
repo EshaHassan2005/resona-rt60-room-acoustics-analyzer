@@ -5,6 +5,7 @@ export default function Footer({
   onOpenRT60Info,
   onOpenSchroeder,
   onOpenISO3382,
+  onOpenRoomModes,
   onOpenConsulting,
   onOpenStudioCinema,
   onOpenArchitectural,
@@ -29,6 +30,7 @@ export default function Footer({
             <ul className="footer-links">
               {link('About Us', onOpenAbout)}
               {link('The Science of RT60', onOpenRT60Info)}
+              {link('Room Modes & Standing Waves', onOpenRoomModes)}
               {link('Schroeder Decay Method', onOpenSchroeder)}
               {link('ISO 3382 Acoustics Standard', onOpenISO3382)}
             </ul>
