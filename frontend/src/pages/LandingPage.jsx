@@ -1,24 +1,23 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import '../styles/landing.css';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import "../styles/landing.css";
 
-import Navbar from '../components/Navbar';
-import HeroSection from '../components/HeroSection';
-import SpaceShowcase from '../components/SpaceShowcase';
-import WhatWeDoSection from '../components/WhatWeDoSection';
-import CounselorSection from '../components/CounselorSection';
-import GetStartedCTA from '../components/GetStartedCTA';
-import Footer from '../components/Footer';
+import Navbar from "../components/Navbar";
+import HeroSection from "../components/HeroSection";
+import SpaceShowcase from "../components/SpaceShowcase";
+import WhatWeDoSection from "../components/WhatWeDoSection";
+import CounselorSection from "../components/CounselorSection";
+import Footer from "../components/Footer";
 
-import RT60InfoModal from '../components/RT60InfoModal';
-import ContactModal from '../components/ContactModal';
-import AboutModal from '../components/AboutModal';
-import SchroederModal from '../components/SchroederModal';
-import ISO3382Modal from '../components/ISO3382Modal';
-import RoomModesModal from '../components/RoomModesModal';
-import AcousticConsultingModal from '../components/AcousticConsultingModal';
-import StudioCinemaModal from '../components/StudioCinemaModal';
-import ArchitecturalModal from '../components/ArchitecturalModal';
+import RT60InfoModal from "../components/RT60InfoModal";
+import ContactModal from "../components/ContactModal";
+import AboutModal from "../components/AboutModal";
+import SchroederModal from "../components/SchroederModal";
+import ISO3382Modal from "../components/ISO3382Modal";
+import RoomModesModal from "../components/RoomModesModal";
+import AcousticConsultingModal from "../components/AcousticConsultingModal";
+import StudioCinemaModal from "../components/StudioCinemaModal";
+import ArchitecturalModal from "../components/ArchitecturalModal";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -33,19 +32,15 @@ export default function LandingPage() {
   const [isStudioCinemaOpen, setIsStudioCinemaOpen] = useState(false);
   const [isArchitecturalOpen, setIsArchitecturalOpen] = useState(false);
 
-  const handleOpenGenerator = (spaceId = '') => {
-    if (spaceId && spaceId !== 'studio') {
-      navigate(`/generator?space=${spaceId}`);
-    } else {
-      navigate('/generator');
-    }
+  const handleOpenGenerator = () => {
+    navigate("/generator");
   };
 
   return (
     <div className="resona-app">
       {/* Top Navigation */}
       <Navbar
-        onOpenAnalyzer={() => handleOpenGenerator()}
+        onOpenAnalyzer={handleOpenGenerator}
         onOpenRT60Info={() => setIsRT60InfoOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
       />
@@ -54,12 +49,11 @@ export default function LandingPage() {
       <main>
         <HeroSection
           onOpenAbout={() => setIsAboutOpen(true)}
-          onOpenAnalyzer={() => handleOpenGenerator()}
+          onOpenAnalyzer={handleOpenGenerator}
         />
-        <SpaceShowcase onSelectSpace={(spaceId) => handleOpenGenerator(spaceId)} />
+        <SpaceShowcase onStartAnalysis={handleOpenGenerator} />
         <WhatWeDoSection onOpenRT60Info={() => setIsRT60InfoOpen(true)} />
         <CounselorSection onOpenContact={() => setIsContactOpen(true)} />
-        <GetStartedCTA onOpenAnalyzer={() => handleOpenGenerator()} />
       </main>
 
       {/* Footer Navigation */}
@@ -73,19 +67,51 @@ export default function LandingPage() {
         onOpenStudioCinema={() => setIsStudioCinemaOpen(true)}
         onOpenArchitectural={() => setIsArchitecturalOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
-        onOpenAnalyzer={() => handleOpenGenerator()}
+        onOpenAnalyzer={handleOpenGenerator}
       />
 
       {/* All Modals */}
-      <RT60InfoModal isOpen={isRT60InfoOpen} onClose={() => setIsRT60InfoOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
-      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
-      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
-      <RoomModesModal isOpen={isRoomModesOpen} onClose={() => setIsRoomModesOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
-      <SchroederModal isOpen={isSchroederOpen} onClose={() => setIsSchroederOpen(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
-      <ISO3382Modal isOpen={isISO3382Open} onClose={() => setIsISO3382Open(false)} onLaunchAnalyzer={() => handleOpenGenerator()} />
-      <AcousticConsultingModal isOpen={isConsultingOpen} onClose={() => setIsConsultingOpen(false)} />
-      <StudioCinemaModal isOpen={isStudioCinemaOpen} onClose={() => setIsStudioCinemaOpen(false)} />
-      <ArchitecturalModal isOpen={isArchitecturalOpen} onClose={() => setIsArchitecturalOpen(false)} />
+      <RT60InfoModal
+        isOpen={isRT60InfoOpen}
+        onClose={() => setIsRT60InfoOpen(false)}
+        onLaunchAnalyzer={handleOpenGenerator}
+      />
+      <ContactModal
+        isOpen={isContactOpen}
+        onClose={() => setIsContactOpen(false)}
+      />
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        onLaunchAnalyzer={handleOpenGenerator}
+      />
+      <RoomModesModal
+        isOpen={isRoomModesOpen}
+        onClose={() => setIsRoomModesOpen(false)}
+        onLaunchAnalyzer={handleOpenGenerator}
+      />
+      <SchroederModal
+        isOpen={isSchroederOpen}
+        onClose={() => setIsSchroederOpen(false)}
+        onLaunchAnalyzer={handleOpenGenerator}
+      />
+      <ISO3382Modal
+        isOpen={isISO3382Open}
+        onClose={() => setIsISO3382Open(false)}
+        onLaunchAnalyzer={handleOpenGenerator}
+      />
+      <AcousticConsultingModal
+        isOpen={isConsultingOpen}
+        onClose={() => setIsConsultingOpen(false)}
+      />
+      <StudioCinemaModal
+        isOpen={isStudioCinemaOpen}
+        onClose={() => setIsStudioCinemaOpen(false)}
+      />
+      <ArchitecturalModal
+        isOpen={isArchitecturalOpen}
+        onClose={() => setIsArchitecturalOpen(false)}
+      />
     </div>
   );
 }
