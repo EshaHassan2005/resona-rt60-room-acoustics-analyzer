@@ -1,0 +1,261 @@
+/* 3D Acoustic Waterfall Visualizer Styles */
+
+.waterfall-3d-card {
+  background: radial-gradient(circle at 50% 0%, rgba(26, 38, 30, 0.95), rgba(13, 19, 15, 0.98));
+  border: 1px solid var(--glass-border-bright, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.5), 0 0 20px rgba(52, 211, 153, 0.05);
+  border-radius: 16px;
+  padding: 22px;
+  margin-top: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.waterfall-3d-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.waterfall-3d-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.waterfall-3d-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--color-cream, #fdfbf7);
+  letter-spacing: -0.01em;
+}
+
+.waterfall-3d-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-text-dim, #94a3b8);
+}
+
+.waterfall-badge-3d {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.waterfall-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.waterfall-view-pills {
+  display: flex;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.waterfall-pill-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim, #94a3b8);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.waterfall-pill-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.waterfall-pill-btn.active {
+  background: rgba(52, 211, 153, 0.2);
+  color: #34d399;
+  box-shadow: 0 2px 6px rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+/* SVG Container */
+.waterfall-svg-wrapper {
+  position: relative;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(8, 12, 10, 0.75) 0%, rgba(13, 19, 15, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.waterfall-svg-wrapper.waterfall-draggable {
+  cursor: grab;
+  user-select: none;
+}
+
+.waterfall-svg-wrapper.waterfall-draggable:active {
+  cursor: grabbing;
+}
+
+.waterfall-svg-container {
+  width: 100%;
+  height: 310px;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Camera angle readout */
+.waterfall-angle-readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  color: rgba(52, 211, 153, 0.85);
+  font-size: 0.72rem;
+  font-family: monospace;
+  margin-bottom: 10px;
+  transition: all 0.15s ease;
+}
+
+/* Ribbon hover & transitions */
+.waterfall-ribbon-path {
+  transition: opacity 0.25s ease, filter 0.25s ease;
+  cursor: pointer;
+}
+
+.waterfall-ribbon-path:hover {
+  filter: drop-shadow(0 0 10px currentColor);
+}
+
+/* Band Selector Chips */
+.waterfall-band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.band-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(18, 24, 20, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 4px 11px;
+  font-size: 0.75rem;
+  color: var(--color-text-dim, #94a3b8);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.band-chip:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.band-chip.active {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.band-chip-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* Inspection Tooltip Bar */
+.waterfall-inspector-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 10px;
+  padding: 8px 14px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.waterfall-inspector-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+}
+
+.inspector-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-dim, #94a3b8);
+}
+
+.inspector-meta-item strong {
+  color: var(--color-cream, #fdfbf7);
+  font-weight: 600;
+}
+
+.inspector-badge-status {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .waterfall-svg-container {
+    height: 220px;
+  }
+  .waterfall-3d-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .waterfall-inspector-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

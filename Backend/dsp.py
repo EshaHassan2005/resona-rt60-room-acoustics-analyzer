@@ -382,7 +382,7 @@ def calculate_room_modes(
         "modes": modes,
         "fft": {
             "frequencies": [round(f, 2) for f in fft_freqs],
-            "amplitudes": [round(a, 4) for a in fft_amps]
+            "amplitudes": [round(float(a), 4) for a in norm_amps] if len(fft_amps) > 0 else []
         },
         "matched_peaks": matched_peaks
     }
