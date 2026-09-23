@@ -172,8 +172,7 @@ When deploying to Vercel, define `VITE_API_URL` under **Project Settings > Envir
 ---
 
 ## Philosophy
-
-A room is never just an empty container for sound—it is the final, unskippable component in the audio chain. Even the most accurate loudspeakers and instruments cannot overcome severe standing wave buildup or unbalanced decay times. Resona was built to make architectural acoustics accessible, translating complex wave mechanics into practical, actionable spatial design.
+A room is never just an empty container for sound - it is the final, unskippable component in the audio chain. Even the most accurate loudspeakers and instruments cannot overcome severe standing wave buildup or unbalanced decay times. Resona was built to make architectural acoustics accessible, translating complex wave mechanics into practical, actionable spatial design.
 
 Accurate acoustics are not accidental. They are engineered.
 
