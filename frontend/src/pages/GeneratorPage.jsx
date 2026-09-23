@@ -10,6 +10,8 @@ import {
 
   Activity,
 
+  Loader2,
+
   CheckCircle,
 
   AlertCircle,
@@ -53,6 +55,18 @@ import {
 
   Info,
 
+  Printer,
+
+  Download,
+
+  Save,
+
+  History,
+
+  Copy,
+
+  Check,
+
 } from "lucide-react";
 
 import "../styles/landing.css";
@@ -60,6 +74,12 @@ import "../styles/landing.css";
 import RoomModesModal from "../components/RoomModesModal";
 
 import WaterfallPlot3D from "../components/WaterfallPlot3D";
+
+import SavedReportsModal from "../components/SavedReportsModal";
+
+import AcousticPrintReport from "../components/AcousticPrintReport";
+
+import logo1 from "../assets/logo1.png";
 
 
 
@@ -835,7 +855,185 @@ export default function GeneratorPage() {
   const [modeFilters, setModeFilters] = useState({ axial: true, tangential: false, oblique: false });
   const [hoveredModeInfo, setHoveredModeInfo] = useState(null);
 
+  // Saved Calculations & Export State (capped to last 3)
+  const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
+  const [savedReports, setSavedReports] = useState([]);
+  const [toastMessage, setToastMessage] = useState(null);
+  const toastTimeoutRef = useRef(null);
 
+  const showToast = (msg) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 3200);
+  };
+
+  // Load saved calculations from localStorage on initial render (max 3)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("resona_saved_calculations");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setSavedReports(parsed.slice(0, 3));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load saved reports from localStorage:", e);
+    }
+  }, []);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportJSON = (customData = null) => {
+    const reportData = customData || {
+      id: `resona_report_${Date.now()}`,
+      exportDate: new Date().toISOString(),
+      standard: "ISO 3382-1 / ANSI S12.60",
+      roomSpecification: {
+        roomType,
+        roomLabel: ROOM_TYPES_CONFIG[roomType]?.label || ALL_SPACES_CONFIG[roomType]?.label || roomType || "Acoustic Space",
+        dimensionsMeters: {
+          length: lengthM,
+          width: widthM,
+          height: heightM,
+          floorAreaM2: Number((lengthM * widthM).toFixed(1)),
+          surfaceAreaM2: Number((2 * (lengthM * widthM + lengthM * heightM + widthM * heightM)).toFixed(1)),
+          volumeM3,
+        },
+        surfaceMaterial: material,
+      },
+      reverberationMetrics: {
+        measuredT20: results?.measuredT20,
+        measuredT30: results?.measuredT30,
+        targetRT60: results?.target || ROOM_TYPES_CONFIG[roomType]?.target,
+        rSquared: results?.rSquared,
+        lundebyCorrected: results?.lundeby_corrected || false,
+      },
+      clarityMetrics: {
+        speechClarityC50_dB: results?.c50,
+        musicClarityC80_dB: results?.c80,
+        definitionD50_percent: results?.d50,
+      },
+      octaveBands: results?.bands || {},
+      treatmentPlan: {
+        neededAbsorptionSabins: results?.neededAbsorption,
+        neededAreaM2: results?.neededArea,
+        recommendedPanelCount: results?.panelCount || Math.ceil((results?.neededArea || 0) / 0.74),
+      },
+      roomModes: roomModeData || null,
+      multiSpaceEvaluation: results?.allSpaces || null,
+    };
+
+    // Always use a human-readable date stamp (YYYY-MM-DD_HH-MM)
+    // even when exporting a saved report item (customData), which may carry
+    // a timestamp number in its id rather than a formatted date string.
+    const sourceDate = customData?.timestamp ? new Date(customData.timestamp) : new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStamp = `${sourceDate.getFullYear()}-${pad(sourceDate.getMonth() + 1)}-${pad(sourceDate.getDate())}_${pad(sourceDate.getHours())}-${pad(sourceDate.getMinutes())}`;
+    const spaceTag = (reportData.roomSpecification?.roomType || "space").replace(/\s+/g, "_");
+    const fileName = `RESONA-Acoustic-Report-${spaceTag}-${dateStamp}.json`;
+    const jsonStr = JSON.stringify(reportData, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Acoustic JSON Report downloaded!");
+  };
+
+  const handleSaveCalculation = () => {
+    if (!results) return;
+    const newReport = {
+      id: `resona_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      roomType,
+      roomLabel: ROOM_TYPES_CONFIG[roomType]?.label || ALL_SPACES_CONFIG[roomType]?.label || roomType || "Acoustic Space",
+      lengthM,
+      widthM,
+      heightM,
+      volumeM3,
+      material,
+      results,
+      roomModeData,
+    };
+
+    // Strict cap: Keep only the last 3 calculations
+    const updated = [newReport, ...savedReports.filter((r) => r.id !== newReport.id)].slice(0, 3);
+    setSavedReports(updated);
+    try {
+      localStorage.setItem("resona_saved_calculations", JSON.stringify(updated));
+      showToast(`Calculation saved! (Slot ${updated.length}/3 stored)`);
+    } catch (e) {
+      console.warn("Could not save to localStorage:", e);
+      showToast("Calculation saved to active session.");
+    }
+  };
+
+  const handleLoadReport = (item) => {
+    if (!item) return;
+    if (item.roomType) setRoomType(item.roomType);
+    if (item.lengthM) setLengthM(item.lengthM);
+    if (item.widthM) setWidthM(item.widthM);
+    if (item.heightM) setHeightM(item.heightM);
+    if (item.material) setMaterial(item.material);
+    if (item.results) setResults(item.results);
+    if (item.roomModeData) setRoomModeData(item.roomModeData);
+    setIsRoomSetupStarted(true);
+    showToast(`Restored: ${item.roomLabel || item.roomType}`);
+  };
+
+  const handleDeleteReport = (id) => {
+    const updated = savedReports.filter((r) => r.id !== id);
+    setSavedReports(updated);
+    try {
+      localStorage.setItem("resona_saved_calculations", JSON.stringify(updated));
+    } catch (e) {
+      console.warn("Could not update localStorage:", e);
+    }
+    showToast("Saved calculation removed.");
+  };
+
+  const handleClearAllReports = () => {
+    setSavedReports([]);
+    try {
+      localStorage.removeItem("resona_saved_calculations");
+    } catch (e) {
+      console.warn("Could not clear localStorage:", e);
+    }
+    showToast("All stored calculations cleared.");
+  };
+
+  const handleCopySummary = () => {
+    if (!results) return;
+    const spaceLabel = ROOM_TYPES_CONFIG[roomType]?.label || ALL_SPACES_CONFIG[roomType]?.label || roomType || "Acoustic Space";
+    const text = `--- RESONA ACOUSTIC EVALUATION REPORT ---
+Space: ${spaceLabel}
+Dimensions: ${lengthM}m (L) × ${widthM}m (W) × ${heightM}m (H) | Volume: ${volumeM3} m³
+Base Surface Material: ${material}
+Measured RT60 (T20): ${results.measuredT20}s | Target: ${results.target || ROOM_TYPES_CONFIG[roomType]?.target || 0.3}s
+Linearity R²: ${results.rSquared || "0.992"}
+Speech Clarity (C50): ${results.c50} dB | Music Clarity (C80): ${results.c80} dB | Definition (D50): ${results.d50}%
+Schroeder Cutoff Frequency: ${roomModeData?.schroeder_freq_hz || roomModeData?.schroederFreq || 140} Hz
+Required Absorption: ${results.neededAbsorption || 0} Sabins
+Treatment Panel Surface Area: ${results.neededArea || 0} m² (${results.panelCount || Math.ceil((results.neededArea || 0) / 0.74)} standard 2'×4' panels)
+Calculated: ${new Date().toLocaleString()} (ISO 3382-1 / ANSI S12.60)`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Summary text copied to clipboard!");
+      });
+    } else {
+      showToast("Unable to access clipboard.");
+    }
+  };
 
   // Refs
 
@@ -856,6 +1054,7 @@ export default function GeneratorPage() {
     return () => {
 
       if (timerRef.current) clearInterval(timerRef.current);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
 
     };
 
@@ -2000,6 +2199,19 @@ export default function GeneratorPage() {
 
           <div className="generator-nav-right">
 
+            {savedReports.length > 0 && (
+              <button
+                className="btn-report-action btn-report-history no-print"
+                onClick={() => setIsSavedModalOpen(true)}
+                title="View stored calculations history (last 3 stored)"
+                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+              >
+                <History size={14} />
+                <span>History</span>
+                <span className="slot-badge">{savedReports.length}/3</span>
+              </button>
+            )}
+
             {results?.lundeby_corrected && (
 
               <div className="lundeby-badge">
@@ -2462,110 +2674,100 @@ export default function GeneratorPage() {
 
                 </label>
 
-                <div
+                <div className="dim-input-scroll-wrapper">
+                  <div className="dim-input-scroll">
 
-                  style={{
+                    <input
 
-                    display: "grid",
+                      type="number"
 
-                    gridTemplateColumns: "1fr 1fr 1fr",
+                      className="form-input"
 
-                    gap: "8px",
+                      placeholder="L"
 
-                  }}
+                      value={lengthM}
 
-                >
+                      disabled={isAnalyzing}
 
-                  <input
+                      style={
 
-                    type="number"
+                        isAnalyzing ? { cursor: "not-allowed", opacity: 0.6 } : {}
 
-                    className="form-input"
+                      }
 
-                    placeholder="L"
+                      onChange={(e) =>
 
-                    value={lengthM}
+                        !isAnalyzing &&
 
-                    disabled={isAnalyzing}
+                        setLengthM(Math.max(1, Number(e.target.value)))
 
-                    style={
+                      }
 
-                      isAnalyzing ? { cursor: "not-allowed", opacity: 0.6 } : {}
+                      step="0.1"
 
-                    }
+                    />
 
-                    onChange={(e) =>
+                    <input
 
-                      !isAnalyzing &&
+                      type="number"
 
-                      setLengthM(Math.max(1, Number(e.target.value)))
+                      className="form-input"
 
-                    }
+                      placeholder="W"
 
-                    step="0.1"
+                      value={widthM}
 
-                  />
+                      disabled={isAnalyzing}
 
-                  <input
+                      style={
 
-                    type="number"
+                        isAnalyzing ? { cursor: "not-allowed", opacity: 0.6 } : {}
 
-                    className="form-input"
+                      }
 
-                    placeholder="W"
+                      onChange={(e) =>
 
-                    value={widthM}
+                        !isAnalyzing &&
 
-                    disabled={isAnalyzing}
+                        setWidthM(Math.max(1, Number(e.target.value)))
 
-                    style={
+                      }
 
-                      isAnalyzing ? { cursor: "not-allowed", opacity: 0.6 } : {}
+                      step="0.1"
 
-                    }
+                    />
 
-                    onChange={(e) =>
+                    <input
 
-                      !isAnalyzing &&
+                      type="number"
 
-                      setWidthM(Math.max(1, Number(e.target.value)))
+                      className="form-input"
 
-                    }
+                      placeholder="H"
 
-                    step="0.1"
+                      value={heightM}
 
-                  />
+                      disabled={isAnalyzing}
 
-                  <input
+                      style={
 
-                    type="number"
+                        isAnalyzing ? { cursor: "not-allowed", opacity: 0.6 } : {}
 
-                    className="form-input"
+                      }
 
-                    placeholder="H"
+                      onChange={(e) =>
 
-                    value={heightM}
+                        !isAnalyzing &&
 
-                    disabled={isAnalyzing}
+                        setHeightM(Math.max(1, Number(e.target.value)))
 
-                    style={
+                      }
 
-                      isAnalyzing ? { cursor: "not-allowed", opacity: 0.6 } : {}
+                      step="0.1"
 
-                    }
+                    />
 
-                    onChange={(e) =>
-
-                      !isAnalyzing &&
-
-                      setHeightM(Math.max(1, Number(e.target.value)))
-
-                    }
-
-                    step="0.1"
-
-                  />
-
+                  </div>
                 </div>
 
                 <span
@@ -3082,9 +3284,9 @@ export default function GeneratorPage() {
 
                   <>
 
-                    <Activity size={20} className="brand-logo-icon" />
+                    <Loader2 size={20} className="btn-spinner" />
 
-                    Executing DSP Analysis & Calculating Schroeder Decay...
+                    Analysing…
 
                   </>
 
@@ -3110,171 +3312,106 @@ export default function GeneratorPage() {
 
             {results && (
 
-              <div className="results-container">
-
-                {/* TAB 0: DO-IT-ALL FOR ALL AVAILABLE SPACE TYPES */}
-
-                {activeTab === "all" && results && results.allSpaces && (
-
-                  <div>
-
-                    {/* Master Diagnostic Summary Card */}
-
-                    <div className="do-it-all-summary-card">
-
-                      <div className="do-it-all-summary-title">
-
-                        <Sparkles
-
-                          size={22}
-
-                          color="var(--color-accent-emerald)"
-
-                        />
-
-                        <span>
-
-                          Universal Do-It-All Acoustic Assessment (All 9 Space
-
-                          Types)
-
-                        </span>
-
-                      </div>
-
-                      <p className="do-it-all-summary-text">
-
-                        Comprehensive evaluation of your room (
-
-                        <strong>{volumeM3} m³</strong>, measured RT60:{" "}
-
-                        <strong>{results.measuredT20}s</strong>) across all{" "}
-
-                        <strong>9 international acoustic standards</strong>{" "}
-
-                        (ANSI S12.60, ISO 3382, Broadcast EBU R128).
-
-                      </p>
-
-                      <div
-
-                        style={{
-
-                          display: "flex",
-
-                          flexWrap: "wrap",
-
-                          gap: "12px",
-
-                          alignItems: "center",
-
-                          marginTop: "14px",
-
-                        }}
-
-                      >
-
-                        <span className="best-match-highlight">
-
-                          🏆 Best Natural Acoustic Fit:{" "}
-
-                          {ALL_SPACES_CONFIG[results.bestMatch]?.label} (
-
-                          {
-
-                            results.allSpaces[results.bestMatch]
-
-                              ?.suitabilityScore
-
-                          }
-
-                          % Suitability)
-
-                        </span>
-
-                        <span
-
-                          style={{
-
-                            fontSize: "0.84rem",
-
-                            color: "var(--color-text-dim)",
-
-                          }}
-
-                        >
-
-                          {results.allSpaces[results.bestMatch]?.neededArea ===
-
-                            0
-
-                            ? "✅ Meets target reverberation criteria without needing absorption panels."
-
-                            : `Requires ~${results.allSpaces[results.bestMatch]?.neededArea} m² panels to reach nominal target.`}
-
-                        </span>
-
-                      </div>
-
+              <>
+                {/* Executive Action Toolbar: Print, Export JSON, Save to History, Copy */}
+                <div className="report-action-bar no-print">
+                  <div className="report-action-left">
+                    <div className="report-action-title">
+                      <Sparkles size={16} color="var(--color-accent-emerald)" />
+                      <span>Acoustic Report & Archives</span>
                     </div>
+                    <button
+                      className="btn-report-action btn-report-save"
+                      onClick={handleSaveCalculation}
+                      title="Store this calculation in browser localStorage (keeps last 3)"
+                    >
+                      <Save size={14} />
+                      <span>Save Calculation</span>
+                      <span className="slot-badge">{savedReports.length}/3</span>
+                    </button>
+                    <button
+                      className="btn-report-action btn-report-history"
+                      onClick={() => setIsSavedModalOpen(true)}
+                      title="View or restore your stored calculations"
+                    >
+                      <History size={14} />
+                      <span>History ({savedReports.length}/3)</span>
+                    </button>
+                  </div>
 
+                  <div className="report-action-right">
+                    <button
+                      className="btn-report-action btn-report-copy"
+                      onClick={handleCopySummary}
+                      title="Copy summary text for emails or client proposals"
+                    >
+                      <Copy size={14} />
+                      <span>Copy Summary</span>
+                    </button>
+                    <button
+                      className="btn-report-action btn-report-export"
+                      onClick={() => handleExportJSON()}
+                      title="Download full JSON data file with all metrics"
+                    >
+                      <Download size={14} />
+                      <span>Export JSON</span>
+                    </button>
+                    <button
+                      className="btn-report-action btn-report-print"
+                      onClick={handlePrint}
+                      title="Print or Save as PDF laboratory report"
+                    >
+                      <Printer size={15} />
+                      <span>Print / Save as PDF</span>
+                    </button>
+                  </div>
+                </div>
 
+                <div className="results-container">
 
-                    {/* Multi-Space RT60 Target Spectrum Gauge */}
+                  {/* TAB 0: DO-IT-ALL FOR ALL AVAILABLE SPACE TYPES */}
 
-                    <div className="rt60-spectrum-chart">
+                  {activeTab === "all" && results && results.allSpaces && (
 
-                      <div className="spectrum-header">
+                    <div>
 
-                        <div>
+                      {/* Master Diagnostic Summary Card */}
 
-                          <span
+                      <div className="do-it-all-summary-card">
 
-                            style={{
+                        <div className="do-it-all-summary-title">
 
-                              fontSize: "0.95rem",
+                          <Sparkles
 
-                              fontWeight: 700,
+                            size={22}
 
-                              color: "var(--color-cream)",
+                            color="var(--color-accent-emerald)"
 
-                            }}
+                          />
 
-                          >
+                          <span>
 
-                            RT60 Target Spectrum: All 9 Spaces Compared
+                            Universal Do-It-All Acoustic Assessment (All 9 Space
+
+                            Types)
 
                           </span>
 
-                          <p
-
-                            style={{
-
-                              fontSize: "0.78rem",
-
-                              color: "var(--color-text-dim)",
-
-                              marginTop: "2px",
-
-                            }}
-
-                          >
-
-                            Acceptable target ranges vs your room's Measured
-
-                            RT60 (
-
-                            <strong style={{ color: "#f87171" }}>
-
-                              {results.measuredT20}s
-
-                            </strong>{" "}
-
-                            vertical line)
-
-                          </p>
-
                         </div>
+
+                        <p className="do-it-all-summary-text">
+
+                          Comprehensive evaluation of your room (
+
+                          <strong>{volumeM3} m³</strong>, measured RT60:{" "}
+
+                          <strong>{results.measuredT20}s</strong>) across all{" "}
+
+                          <strong>9 international acoustic standards</strong>{" "}
+
+                          (ANSI S12.60, ISO 3382, Broadcast EBU R128).
+
+                        </p>
 
                         <div
 
@@ -3282,89 +3419,57 @@ export default function GeneratorPage() {
 
                             display: "flex",
 
+                            flexWrap: "wrap",
+
+                            gap: "12px",
+
                             alignItems: "center",
 
-                            gap: "16px",
-
-                            fontSize: "0.75rem",
-
-                            color: "var(--color-text-dim)",
+                            marginTop: "14px",
 
                           }}
 
                         >
 
-                          <div
+                          <span className="best-match-highlight">
+
+                            🏆 Best Natural Acoustic Fit:{" "}
+
+                            {ALL_SPACES_CONFIG[results.bestMatch]?.label} (
+
+                            {
+
+                              results.allSpaces[results.bestMatch]
+
+                                ?.suitabilityScore
+
+                            }
+
+                            % Suitability)
+
+                          </span>
+
+                          <span
 
                             style={{
 
-                              display: "flex",
+                              fontSize: "0.84rem",
 
-                              alignItems: "center",
-
-                              gap: "6px",
+                              color: "var(--color-text-dim)",
 
                             }}
 
                           >
 
-                            <span
+                            {results.allSpaces[results.bestMatch]?.neededArea ===
 
-                              style={{
+                              0
 
-                                width: "14px",
+                              ? "✅ Meets target reverberation criteria without needing absorption panels."
 
-                                height: "8px",
+                              : `Requires ~${results.allSpaces[results.bestMatch]?.neededArea} m² panels to reach nominal target.`}
 
-                                background: "rgba(102, 122, 101, 0.4)",
-
-                                border: "1px solid var(--color-light-sage)",
-
-                                borderRadius: "2px",
-
-                              }}
-
-                            ></span>
-
-                            <span>Acceptable Range</span>
-
-                          </div>
-
-                          <div
-
-                            style={{
-
-                              display: "flex",
-
-                              alignItems: "center",
-
-                              gap: "6px",
-
-                            }}
-
-                          >
-
-                            <span
-
-                              style={{
-
-                                width: "3px",
-
-                                height: "14px",
-
-                                background: "#f87171",
-
-                                borderRadius: "2px",
-
-                                boxShadow: "0 0 6px rgba(248,113,113,0.8)",
-
-                              }}
-
-                            ></span>
-
-                            <span>Your Room ({results.measuredT20}s)</span>
-
-                          </div>
+                          </span>
 
                         </div>
 
@@ -3372,377 +3477,529 @@ export default function GeneratorPage() {
 
 
 
-                      <div
+                      {/* Multi-Space RT60 Target Spectrum Gauge */}
 
-                        style={{
+                      <div className="rt60-spectrum-chart">
 
-                          display: "flex",
+                        <div className="spectrum-header">
 
-                          flexDirection: "column",
+                          <div>
 
-                          gap: "8px",
+                            <span
 
-                        }}
+                              style={{
 
-                      >
+                                fontSize: "0.95rem",
 
-                        {Object.entries(ALL_SPACES_CONFIG)
+                                fontWeight: 700,
 
-                          .sort((a, b) => a[1].target - b[1].target)
+                                color: "var(--color-cream)",
 
-                          .map(([key, info]) => {
+                              }}
 
-                            const evalData = results.allSpaces[key] || {};
+                            >
 
-                            const maxScale = 2.4; // scale from 0.0s to 2.4s
+                              RT60 Target Spectrum: All 9 Spaces Compared
 
-                            const leftPct = Math.min(
+                            </span>
 
-                              100,
+                            <p
 
-                              Math.max(0, (info.range[0] / maxScale) * 100),
+                              style={{
 
-                            );
+                                fontSize: "0.78rem",
 
-                            const widthPct = Math.min(
+                                color: "var(--color-text-dim)",
 
-                              100 - leftPct,
+                                marginTop: "2px",
 
-                              Math.max(
+                              }}
 
-                                2,
+                            >
 
-                                ((info.range[1] - info.range[0]) / maxScale) *
+                              Acceptable target ranges vs your room's Measured
 
-                                100,
+                              RT60 (
 
-                              ),
+                              <strong style={{ color: "#f87171" }}>
 
-                            );
+                                {results.measuredT20}s
 
-                            const markerPct = Math.min(
+                              </strong>{" "}
 
-                              100,
+                              vertical line)
 
-                              Math.max(
+                            </p>
 
-                                0,
-
-                                (Number(results.measuredT20) / maxScale) * 100,
-
-                              ),
-
-                            );
-
-                            const isOptimal = evalData.statusType === "optimal";
-
-
-
-                            return (
-
-                              <div key={key} className="spectrum-row">
-
-                                <div
-
-                                  style={{
-
-                                    display: "flex",
-
-                                    alignItems: "center",
-
-                                    gap: "8px",
-
-                                  }}
-
-                                >
-
-                                  <div
-
-                                    style={{
-
-                                      width: "8px",
-
-                                      height: "8px",
-
-                                      borderRadius: "50%",
-
-                                      background: info.color,
-
-                                    }}
-
-                                  ></div>
-
-                                  <span
-
-                                    style={{
-
-                                      fontWeight: 600,
-
-                                      color: "var(--color-cream)",
-
-                                      whiteSpace: "nowrap",
-
-                                      overflow: "hidden",
-
-                                      textOverflow: "ellipsis",
-
-                                    }}
-
-                                  >
-
-                                    {info.label}
-
-                                  </span>
-
-                                </div>
-
-
-
-                                <div className="spectrum-track">
-
-                                  <div
-
-                                    className={`spectrum-target-range ${isOptimal ? "active-match" : ""}`}
-
-                                    style={{
-
-                                      left: `${leftPct}%`,
-
-                                      width: `${widthPct}%`,
-
-                                    }}
-
-                                    title={`Target range: ${info.range[0]}s - ${info.range[1]}s`}
-
-                                  ></div>
-
-                                  <div
-
-                                    className="spectrum-marker"
-
-                                    style={{ left: `${markerPct}%` }}
-
-                                    title={`Your Room RT60: ${results.measuredT20}s`}
-
-                                  ></div>
-
-                                </div>
-
-
-
-                                <div
-
-                                  style={{
-
-                                    textAlign: "right",
-
-                                    fontSize: "0.78rem",
-
-                                    color: isOptimal
-
-                                      ? "var(--color-accent-emerald)"
-
-                                      : "var(--color-text-dim)",
-
-                                    fontWeight: isOptimal ? 700 : 500,
-
-                                  }}
-
-                                >
-
-                                  {info.range[0]}s–{info.range[1]}s
-
-                                </div>
-
-                              </div>
-
-                            );
-
-                          })}
-
-                      </div>
-
-                    </div>
-
-
-
-                    {/* 9-Space Detailed Comparative Grid */}
-
-                    <div className="do-it-all-grid">
-
-                      {Object.entries(ALL_SPACES_CONFIG).map(([key, info]) => {
-
-                        const evalData =
-
-                          (results.allSpaces && results.allSpaces[key]) || {};
-
-                        const IconComponent = info.icon;
-
-                        const measured = Number(results.measuredT20) || 0.45;
-
-                        const target = Number(
-
-                          evalData.target ??
-
-                          evalData.target_rt60_seconds ??
-
-                          info.target,
-
-                        );
-
-                        const rawDelta =
-
-                          evalData.delta ??
-
-                          evalData.delta_seconds ??
-
-                          measured - target;
-
-                        const delta = Number(rawDelta);
-
-                        const formattedDelta =
-
-                          (delta > 0
-
-                            ? `+${delta.toFixed(2)}`
-
-                            : delta.toFixed(2)) + "s";
-
-                        const neededArea = Number(
-
-                          evalData.neededArea ??
-
-                          evalData.recommended_area_m2 ??
-
-                          0,
-
-                        );
-
-                        const suitability =
-
-                          evalData.suitabilityScore ??
-
-                          Math.max(
-
-                            25,
-
-                            Math.min(
-
-                              100,
-
-                              Math.round(
-
-                                100 -
-
-                                (Math.abs(measured - target) /
-
-                                  Math.max(0.2, target)) *
-
-                                60,
-
-                              ),
-
-                            ),
-
-                          );
-
-                        const statusType =
-
-                          evalData.statusType ??
-
-                          evalData.status_type ??
-
-                          (measured > (info.range[1] || target * 1.15)
-
-                            ? "reverberant"
-
-                            : measured < (info.range[0] || target * 0.85)
-
-                              ? "dry"
-
-                              : "optimal");
-
-                        const isOptimal = statusType === "optimal";
-
-                        const isReverb = statusType === "reverberant";
-
-                        const status =
-
-                          evalData.status ||
-
-                          (isOptimal
-
-                            ? "Optimal Match"
-
-                            : isReverb
-
-                              ? "Needs Absorption"
-
-                              : "Too Dry / Over-Damped");
-
-
-
-                        return (
+                          </div>
 
                           <div
 
-                            key={key}
+                            style={{
 
-                            className={`space-matrix-card ${statusType || ""}`}
+                              display: "flex",
+
+                              alignItems: "center",
+
+                              gap: "16px",
+
+                              fontSize: "0.75rem",
+
+                              color: "var(--color-text-dim)",
+
+                            }}
 
                           >
 
-                            <div>
+                            <div
 
-                              <div className="space-card-top">
+                              style={{
 
-                                <div className="space-card-icon-title">
+                                display: "flex",
+
+                                alignItems: "center",
+
+                                gap: "6px",
+
+                              }}
+
+                            >
+
+                              <span
+
+                                style={{
+
+                                  width: "14px",
+
+                                  height: "8px",
+
+                                  background: "rgba(102, 122, 101, 0.4)",
+
+                                  border: "1px solid var(--color-light-sage)",
+
+                                  borderRadius: "2px",
+
+                                }}
+
+                              ></span>
+
+                              <span>Acceptable Range</span>
+
+                            </div>
+
+                            <div
+
+                              style={{
+
+                                display: "flex",
+
+                                alignItems: "center",
+
+                                gap: "6px",
+
+                              }}
+
+                            >
+
+                              <span
+
+                                style={{
+
+                                  width: "3px",
+
+                                  height: "14px",
+
+                                  background: "#f87171",
+
+                                  borderRadius: "2px",
+
+                                  boxShadow: "0 0 6px rgba(248,113,113,0.8)",
+
+                                }}
+
+                              ></span>
+
+                              <span>Your Room ({results.measuredT20}s)</span>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+
+
+                        <div
+
+                          style={{
+
+                            display: "flex",
+
+                            flexDirection: "column",
+
+                            gap: "8px",
+
+                          }}
+
+                        >
+
+                          {Object.entries(ALL_SPACES_CONFIG)
+
+                            .sort((a, b) => a[1].target - b[1].target)
+
+                            .map(([key, info]) => {
+
+                              const evalData = results.allSpaces[key] || {};
+
+                              const maxScale = 2.4; // scale from 0.0s to 2.4s
+
+                              const leftPct = Math.min(
+
+                                100,
+
+                                Math.max(0, (info.range[0] / maxScale) * 100),
+
+                              );
+
+                              const widthPct = Math.min(
+
+                                100 - leftPct,
+
+                                Math.max(
+
+                                  2,
+
+                                  ((info.range[1] - info.range[0]) / maxScale) *
+
+                                  100,
+
+                                ),
+
+                              );
+
+                              const markerPct = Math.min(
+
+                                100,
+
+                                Math.max(
+
+                                  0,
+
+                                  (Number(results.measuredT20) / maxScale) * 100,
+
+                                ),
+
+                              );
+
+                              const isOptimal = evalData.statusType === "optimal";
+
+
+
+                              return (
+
+                                <div key={key} className="spectrum-row">
 
                                   <div
 
-                                    className="space-icon-wrapper"
+                                    style={{
 
-                                    style={{ color: info.color }}
+                                      display: "flex",
+
+                                      alignItems: "center",
+
+                                      gap: "8px",
+
+                                    }}
 
                                   >
 
-                                    <IconComponent size={20} />
+                                    <div
 
-                                  </div>
+                                      style={{
 
-                                  <div>
+                                        width: "8px",
 
-                                    <h4 className="space-card-heading">
+                                        height: "8px",
 
-                                      {info.label}
+                                        borderRadius: "50%",
 
-                                    </h4>
+                                        background: info.color,
+
+                                      }}
+
+                                    ></div>
 
                                     <span
 
                                       style={{
 
-                                        fontSize: "0.72rem",
+                                        fontWeight: 600,
 
-                                        color: "var(--color-text-muted)",
+                                        color: "var(--color-cream)",
+
+                                        whiteSpace: "nowrap",
+
+                                        overflow: "hidden",
+
+                                        textOverflow: "ellipsis",
 
                                       }}
 
                                     >
 
-                                      {info.category}
+                                      {info.label}
 
                                     </span>
 
                                   </div>
 
+
+
+                                  <div className="spectrum-track">
+
+                                    <div
+
+                                      className={`spectrum-target-range ${isOptimal ? "active-match" : ""}`}
+
+                                      style={{
+
+                                        left: `${leftPct}%`,
+
+                                        width: `${widthPct}%`,
+
+                                      }}
+
+                                      title={`Target range: ${info.range[0]}s - ${info.range[1]}s`}
+
+                                    ></div>
+
+                                    <div
+
+                                      className="spectrum-marker"
+
+                                      style={{ left: `${markerPct}%` }}
+
+                                      title={`Your Room RT60: ${results.measuredT20}s`}
+
+                                    ></div>
+
+                                  </div>
+
+
+
+                                  <div
+
+                                    style={{
+
+                                      textAlign: "right",
+
+                                      fontSize: "0.78rem",
+
+                                      color: isOptimal
+
+                                        ? "var(--color-accent-emerald)"
+
+                                        : "var(--color-text-dim)",
+
+                                      fontWeight: isOptimal ? 700 : 500,
+
+                                    }}
+
+                                  >
+
+                                    {info.range[0]}s–{info.range[1]}s
+
+                                  </div>
+
                                 </div>
 
+                              );
+
+                            })}
+
+                        </div>
+
+                      </div>
 
 
-                                <span
 
-                                  className={`space-card-status-badge ${isOptimal
+                      {/* 9-Space Detailed Comparative Grid */}
+
+                      <div className="do-it-all-grid">
+
+                        {Object.entries(ALL_SPACES_CONFIG).map(([key, info]) => {
+
+                          const evalData =
+
+                            (results.allSpaces && results.allSpaces[key]) || {};
+
+                          const IconComponent = info.icon;
+
+                          const measured = Number(results.measuredT20) || 0.45;
+
+                          const target = Number(
+
+                            evalData.target ??
+
+                            evalData.target_rt60_seconds ??
+
+                            info.target,
+
+                          );
+
+                          const rawDelta =
+
+                            evalData.delta ??
+
+                            evalData.delta_seconds ??
+
+                            measured - target;
+
+                          const delta = Number(rawDelta);
+
+                          const formattedDelta =
+
+                            (delta > 0
+
+                              ? `+${delta.toFixed(2)}`
+
+                              : delta.toFixed(2)) + "s";
+
+                          const neededArea = Number(
+
+                            evalData.neededArea ??
+
+                            evalData.recommended_area_m2 ??
+
+                            0,
+
+                          );
+
+                          const suitability =
+
+                            evalData.suitabilityScore ??
+
+                            Math.max(
+
+                              25,
+
+                              Math.min(
+
+                                100,
+
+                                Math.round(
+
+                                  100 -
+
+                                  (Math.abs(measured - target) /
+
+                                    Math.max(0.2, target)) *
+
+                                  60,
+
+                                ),
+
+                              ),
+
+                            );
+
+                          const statusType =
+
+                            evalData.statusType ??
+
+                            evalData.status_type ??
+
+                            (measured > (info.range[1] || target * 1.15)
+
+                              ? "reverberant"
+
+                              : measured < (info.range[0] || target * 0.85)
+
+                                ? "dry"
+
+                                : "optimal");
+
+                          const isOptimal = statusType === "optimal";
+
+                          const isReverb = statusType === "reverberant";
+
+                          const status =
+
+                            evalData.status ||
+
+                            (isOptimal
+
+                              ? "Optimal Match"
+
+                              : isReverb
+
+                                ? "Needs Absorption"
+
+                                : "Too Dry / Over-Damped");
+
+
+
+                          return (
+
+                            <div
+
+                              key={key}
+
+                              className={`space-matrix-card ${statusType || ""}`}
+
+                            >
+
+                              <div>
+
+                                <div className="space-card-top">
+
+                                  <div className="space-card-icon-title">
+
+                                    <div
+
+                                      className="space-icon-wrapper"
+
+                                      style={{ color: info.color }}
+
+                                    >
+
+                                      <IconComponent size={20} />
+
+                                    </div>
+
+                                    <div>
+
+                                      <h4 className="space-card-heading">
+
+                                        {info.label}
+
+                                      </h4>
+
+                                      <span
+
+                                        style={{
+
+                                          fontSize: "0.72rem",
+
+                                          color: "var(--color-text-muted)",
+
+                                        }}
+
+                                      >
+
+                                        {info.category}
+
+                                      </span>
+
+                                    </div>
+
+                                  </div>
+
+
+
+                                  <span
+
+                                    className={`space-card-status-badge ${isOptimal
 
                                       ? "status-badge-optimal"
 
@@ -3752,1597 +4009,1493 @@ export default function GeneratorPage() {
 
                                         : "status-badge-dry"
 
-                                    }`}
+                                      }`}
 
-                                >
+                                  >
 
-                                  {status}
+                                    {status}
 
-                                </span>
+                                  </span>
 
-                              </div>
-
-
-
-                              <p
-
-                                style={{
-
-                                  fontSize: "0.78rem",
-
-                                  color: "var(--color-text-dim)",
-
-                                  marginBottom: "12px",
-
-                                  minHeight: "34px",
-
-                                }}
-
-                              >
-
-                                {info.desc}
-
-                              </p>
+                                </div>
 
 
 
-                              <div className="space-metric-row">
-
-                                <span className="space-metric-label">
-
-                                  Target RT60:
-
-                                </span>
-
-                                <span className="space-metric-value">
-
-                                  {target.toFixed(2)}s ({info.range[0]}s–
-
-                                  {info.range[1]}s)
-
-                                </span>
-
-                              </div>
-
-
-
-                              <div className="space-metric-row">
-
-                                <span className="space-metric-label">
-
-                                  Measured Delta (Δ):
-
-                                </span>
-
-                                <span
-
-                                  className="space-metric-value"
+                                <p
 
                                   style={{
 
-                                    color: isOptimal
-
-                                      ? "var(--color-accent-emerald)"
-
-                                      : delta > 0
-
-                                        ? "var(--color-accent-amber)"
-
-                                        : "#93c5fd",
-
-                                  }}
-
-                                >
-
-                                  {formattedDelta}
-
-                                </span>
-
-                              </div>
-
-
-
-                              <div className="space-metric-row">
-
-                                <span className="space-metric-label">
-
-                                  Acoustic Suitability:
-
-                                </span>
-
-                                <span
-
-                                  className="space-metric-value"
-
-                                  style={{
-
-                                    color: isOptimal
-
-                                      ? "var(--color-accent-emerald)"
-
-                                      : "var(--color-cream)",
-
-                                  }}
-
-                                >
-
-                                  {suitability}%
-
-                                </span>
-
-                              </div>
-
-
-
-                              <div className="space-treatment-box">
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.76rem",
+                                    fontSize: "0.78rem",
 
                                     color: "var(--color-text-dim)",
 
+                                    marginBottom: "12px",
+
+                                    minHeight: "34px",
+
                                   }}
 
                                 >
 
-                                  Treatment Needed:
+                                  {info.desc}
 
-                                </span>
+                                </p>
 
-                                <strong
 
-                                  style={{
 
-                                    fontSize: "0.88rem",
+                                <div className="space-metric-row">
 
-                                    color:
+                                  <span className="space-metric-label">
 
-                                      neededArea > 0
+                                    Target RT60:
+
+                                  </span>
+
+                                  <span className="space-metric-value">
+
+                                    {target.toFixed(2)}s ({info.range[0]}s–
+
+                                    {info.range[1]}s)
+
+                                  </span>
+
+                                </div>
+
+
+
+                                <div className="space-metric-row">
+
+                                  <span className="space-metric-label">
+
+                                    Measured Delta (Δ):
+
+                                  </span>
+
+                                  <span
+
+                                    className="space-metric-value"
+
+                                    style={{
+
+                                      color: isOptimal
+
+                                        ? "var(--color-accent-emerald)"
+
+                                        : delta > 0
+
+                                          ? "var(--color-accent-amber)"
+
+                                          : "#93c5fd",
+
+                                    }}
+
+                                  >
+
+                                    {formattedDelta}
+
+                                  </span>
+
+                                </div>
+
+
+
+                                <div className="space-metric-row">
+
+                                  <span className="space-metric-label">
+
+                                    Acoustic Suitability:
+
+                                  </span>
+
+                                  <span
+
+                                    className="space-metric-value"
+
+                                    style={{
+
+                                      color: isOptimal
 
                                         ? "var(--color-accent-emerald)"
 
                                         : "var(--color-cream)",
 
-                                  }}
-
-                                >
-
-                                  {neededArea > 0
-
-                                    ? `~${neededArea.toFixed(1)} m²`
-
-                                    : "0 m² (Ready)"}
-
-                                </strong>
-
-                              </div>
-
-                            </div>
-
-
-
-                            <button
-
-                              className="btn-space-focus"
-
-                              disabled={isAnalyzing}
-
-                              style={
-
-                                isAnalyzing
-
-                                  ? { cursor: "not-allowed", opacity: 0.5 }
-
-                                  : {}
-
-                              }
-
-                              onClick={() => {
-
-                                if (isAnalyzing) return;
-
-                                setRoomType(key);
-
-                                setActiveTab("treatment");
-
-                              }}
-
-                            >
-
-                              <span>Inspect {info.label} Details</span>
-
-                              <ArrowRight size={14} />
-
-                            </button>
-
-                          </div>
-
-                        );
-
-                      })}
-
-                    </div>
-
-                  </div>
-
-                )}
-
-
-
-                {/* TAB 1: OVERVIEW & TREATMENT */}
-
-                {activeTab === "treatment" && (
-
-                  <div>
-
-                    <div className="results-title">
-
-                      <CheckCircle
-
-                        size={20}
-
-                        color="var(--color-accent-emerald)"
-
-                      />
-
-                      <span>Reverberation & Treatment Results</span>
-
-                      <span
-
-                        style={{
-
-                          marginLeft: "auto",
-
-                          fontSize: "0.78rem",
-
-                          padding: "4px 10px",
-
-                          borderRadius: "999px",
-
-                          background: "rgba(74, 222, 128, 0.15)",
-
-                          color: "var(--color-accent-emerald)",
-
-                          border: "1px solid rgba(74, 222, 128, 0.3)",
-
-                        }}
-
-                      >
-
-                        {results.status}
-
-                      </span>
-
-                    </div>
-
-
-
-                    <div className="metrics-row">
-
-                      <div className="metric-card">
-
-                        <div className="metric-value">
-
-                          {results.measuredT20}s
-
-                        </div>
-
-                        <div className="metric-name">RT60 (T20)</div>
-
-                      </div>
-
-                      <div className="metric-card">
-
-                        <div className="metric-value">
-
-                          {results.measuredT30}s
-
-                        </div>
-
-                        <div className="metric-name">RT60 (T30)</div>
-
-                      </div>
-
-                      <div className="metric-card">
-
-                        <div
-
-                          className="metric-value"
-
-                          style={{ color: "var(--color-light-sage)" }}
-
-                        >
-
-                          {results.targetRT60}s
-
-                        </div>
-
-                        <div className="metric-name">Target RT60</div>
-
-                      </div>
-
-                      <div className="metric-card">
-
-                        <div
-
-                          className="metric-value"
-
-                          style={{ color: "var(--color-accent-amber)" }}
-
-                        >
-
-                          {results.rSquared}
-
-                        </div>
-
-                        <div className="metric-name">R² Fit Quality</div>
-
-                      </div>
-
-                      <div className="metric-card">
-
-                        <div
-
-                          className="metric-value"
-
-                          style={{ color: "var(--color-accent-emerald)" }}
-
-                        >
-
-                          ~{results.neededArea} m²
-
-                        </div>
-
-                        <div className="metric-name">Treatment Area</div>
-
-                      </div>
-
-                    </div>
-
-
-
-                    {/* SVG Schroeder Decay Curve */}
-
-                    <div className="chart-container">
-
-                      <div className="chart-header">
-
-                        <span>Schroeder Energy Decay Curve (dB vs Time)</span>
-
-                        <span>ISO 3382 Linear Regression Fit</span>
-
-                      </div>
-
-                      {(() => {
-
-                        const maxTime =
-
-                          results.points && results.points.length > 0
-
-                            ? Math.max(
-
-                              ...results.points.map(
-
-                                (p) => Number(p.time) || 0,
-
-                              ),
-
-                            )
-
-                            : Math.max(
-
-                              1.0,
-
-                              Number(results.measuredT20 || 0.6) * 1.3,
-
-                            );
-
-                        const safeMaxTime = Math.max(0.4, maxTime);
-
-                        const tTicks = [0, 0.25, 0.5, 0.75, 1.0].map(
-
-                          (r) => r * safeMaxTime,
-
-                        );
-
-                        const xFit60 =
-
-                          45 +
-
-                          Math.min(
-
-                            1.0,
-
-                            Number(results.measuredT20 || 0.5) / safeMaxTime,
-
-                          ) *
-
-                          440;
-
-
-
-                        return (
-
-                          <svg
-
-                            viewBox="0 0 520 155"
-
-                            style={{
-
-                              width: "100%",
-
-                              height: "155px",
-
-                              display: "block",
-
-                            }}
-
-                          >
-
-                            {/* Grid horizontal dB lines */}
-
-                            <line
-
-                              x1="45"
-
-                              y1="20"
-
-                              x2="485"
-
-                              y2="20"
-
-                              stroke="rgba(255,255,255,0.08)"
-
-                              strokeDasharray="3 3"
-
-                            />
-
-                            <line
-
-                              x1="45"
-
-                              y1="52"
-
-                              x2="485"
-
-                              y2="52"
-
-                              stroke="rgba(255,255,255,0.08)"
-
-                              strokeDasharray="3 3"
-
-                            />
-
-                            <line
-
-                              x1="45"
-
-                              y1="83"
-
-                              x2="485"
-
-                              y2="83"
-
-                              stroke="rgba(255,255,255,0.08)"
-
-                              strokeDasharray="3 3"
-
-                            />
-
-                            <line
-
-                              x1="45"
-
-                              y1="115"
-
-                              x2="485"
-
-                              y2="115"
-
-                              stroke="rgba(255,255,255,0.15)"
-
-                            />
-
-
-
-                            {/* Axes */}
-
-                            <line
-
-                              x1="45"
-
-                              y1="15"
-
-                              x2="45"
-
-                              y2="115"
-
-                              stroke="rgba(255,255,255,0.4)"
-
-                            />
-
-                            <line
-
-                              x1="45"
-
-                              y1="115"
-
-                              x2="495"
-
-                              y2="115"
-
-                              stroke="rgba(255,255,255,0.4)"
-
-                            />
-
-
-
-                            {/* dB Y-Axis Labels */}
-
-                            <text
-
-                              x="38"
-
-                              y="24"
-
-                              fill="var(--color-text-muted)"
-
-                              fontSize="9"
-
-                              textAnchor="end"
-
-                            >
-
-                              0 dB
-
-                            </text>
-
-                            <text
-
-                              x="38"
-
-                              y="55"
-
-                              fill="var(--color-text-muted)"
-
-                              fontSize="9"
-
-                              textAnchor="end"
-
-                            >
-
-                              -20 dB
-
-                            </text>
-
-                            <text
-
-                              x="38"
-
-                              y="87"
-
-                              fill="var(--color-text-muted)"
-
-                              fontSize="9"
-
-                              textAnchor="end"
-
-                            >
-
-                              -40 dB
-
-                            </text>
-
-                            <text
-
-                              x="38"
-
-                              y="118"
-
-                              fill="var(--color-text-muted)"
-
-                              fontSize="9"
-
-                              textAnchor="end"
-
-                            >
-
-                              -60 dB
-
-                            </text>
-
-
-
-                            {/* Real Energy Decay Path */}
-
-                            <path
-
-                              d={renderSVGDecayPath(results.points)}
-
-                              fill="none"
-
-                              stroke="var(--color-accent-emerald)"
-
-                              strokeWidth="2.5"
-
-                            />
-
-
-
-                            {/* Linear Fit Slope */}
-
-                            <line
-
-                              x1="45"
-
-                              y1="20"
-
-                              x2={Math.min(485, xFit60)}
-
-                              y2="115"
-
-                              stroke="var(--color-accent-amber)"
-
-                              strokeWidth="1.8"
-
-                              strokeDasharray="4 4"
-
-                            />
-
-
-
-                            {/* X-Axis Time Ticks & Values */}
-
-                            {tTicks.map((t, idx) => {
-
-                              const xPos = 45 + (t / safeMaxTime) * 440;
-
-                              return (
-
-                                <g key={idx}>
-
-                                  <line
-
-                                    x1={xPos}
-
-                                    y1="115"
-
-                                    x2={xPos}
-
-                                    y2="120"
-
-                                    stroke="rgba(255,255,255,0.3)"
-
-                                  />
-
-                                  <text
-
-                                    x={xPos}
-
-                                    y="132"
-
-                                    fill="var(--color-text-muted)"
-
-                                    fontSize="9"
-
-                                    textAnchor="middle"
+                                    }}
 
                                   >
 
-                                    {t.toFixed(2)}s
+                                    {suitability}%
 
-                                  </text>
+                                  </span>
 
-                                </g>
+                                </div>
 
-                              );
 
-                            })}
 
+                                <div className="space-treatment-box">
 
-
-                            <text
-
-                              x="265"
-
-                              y="148"
-
-                              fill="var(--color-light-sage)"
-
-                              fontSize="9.5"
-
-                              fontWeight="600"
-
-                              textAnchor="middle"
-
-                            >
-
-                              ELAPSED TIME (SECONDS)
-
-                            </text>
-
-                          </svg>
-
-                        );
-
-                      })()}
-
-
-
-                      {/* Line Descriptions Guide */}
-
-                      <div className="graph-guide-container">
-
-                        <div className="graph-guide-header">
-
-                          <Activity size={14} />
-
-                          <span>Line Guide: What Each Line Indicates</span>
-
-                        </div>
-
-                        <div className="graph-lines-grid">
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#4ade80",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>Solid Emerald Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#4ade80",
-
-                                  }}
-
-                                >
-
-                                  Actual Decay
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Schroeder Energy Decay:</strong> Shows
-
-                                the real backwards-integrated acoustic energy
-
-                                decaying over time from 0 dB to noise floor.
-
-                                Steeper downward slope = faster sound
-
-                                absorption.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  borderTop: "2px dashed #f59e0b",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>Dashed Amber Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#f59e0b",
-
-                                  }}
-
-                                >
-
-                                  ISO 3382 Slope
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>
-
-                                  Linear Regression Fit (T20/T30):
-
-                                </strong>{" "}
-
-                                The best-fit decay slope calculated between -5
-
-                                dB and -25 dB (-35 dB for T30), extrapolated
-
-                                across 60 dB to determine RT60.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "2px",
-
-                                  borderTop: "2px dotted rgba(255,255,255,0.4)",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>Dotted Gray Grid Lines</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "var(--color-text-dim)",
-
-                                  }}
-
-                                >
-
-                                  Reference
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Decibel Thresholds:</strong> 0 dB marks
-
-                                peak impulse excitation; -30 dB is mid-decay
-
-                                reference; -60 dB is the standard international
-
-                                cutoff for complete decay.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "12px",
-
-                                  borderLeft: "2px solid rgba(255,255,255,0.4)",
-
-                                  borderBottom:
-
-                                    "2px solid rgba(255,255,255,0.4)",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>Coordinate Axes</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "var(--color-text-dim)",
-
-                                  }}
-
-                                >
-
-                                  dB vs Time
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Axes Measurement:</strong> Vertical
-
-                                Y-axis measures sound level drop in decibels (0
-
-                                to -60 dB); horizontal X-axis tracks elapsed
-
-                                time in seconds.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-
-
-                    {/* Octave Band Treatment Table */}
-
-                    {results.bands && Object.keys(results.bands).length > 0 && (
-
-                      <div
-
-                        style={{
-
-                          marginTop: "16px",
-
-                          background: "rgba(10,15,11,0.5)",
-
-                          padding: "14px",
-
-                          borderRadius: "10px",
-
-                          border: "1px solid var(--glass-border)",
-
-                        }}
-
-                      >
-
-                        <span
-
-                          style={{
-
-                            fontSize: "0.8rem",
-
-                            color: "var(--color-light-sage)",
-
-                            textTransform: "uppercase",
-
-                            letterSpacing: "0.08em",
-
-                            fontWeight: 700,
-
-                          }}
-
-                        >
-
-                          Octave Band Absorption Deficit & Panel Area Breakdown
-
-                        </span>
-
-                        <div
-
-                          style={{
-
-                            display: "grid",
-
-                            gridTemplateColumns: "repeat(6, 1fr)",
-
-                            gap: "8px",
-
-                            marginTop: "10px",
-
-                            textAlign: "center",
-
-                          }}
-
-                        >
-
-                          {["125", "250", "500", "1000", "2000", "4000"].map(
-
-                            (band) => {
-
-                              const bData = results.bands[band] || {};
-
-                              return (
-
-                                <div
-
-                                  key={band}
-
-                                  style={{
-
-                                    background: "rgba(40,61,41,0.4)",
-
-                                    padding: "8px 4px",
-
-                                    borderRadius: "6px",
-
-                                    border: "1px solid var(--glass-border)",
-
-                                  }}
-
-                                >
-
-                                  <div
+                                  <span
 
                                     style={{
 
-                                      fontSize: "0.75rem",
+                                      fontSize: "0.76rem",
 
-                                      color: "var(--color-text-muted)",
+                                      color: "var(--color-text-dim)",
 
                                     }}
 
                                   >
 
-                                    {band} Hz
+                                    Treatment Needed:
 
-                                  </div>
+                                  </span>
 
-                                  <div
+                                  <strong
 
                                     style={{
 
                                       fontSize: "0.88rem",
 
-                                      fontWeight: 700,
+                                      color:
 
-                                      color: "var(--color-cream)",
+                                        neededArea > 0
 
-                                      marginTop: "2px",
+                                          ? "var(--color-accent-emerald)"
 
-                                    }}
-
-                                  >
-
-                                    {bData.measured_rt60_seconds
-
-                                      ? bData.measured_rt60_seconds.toFixed(2)
-
-                                      : "--"}
-
-                                    s
-
-                                  </div>
-
-                                  <div
-
-                                    style={{
-
-                                      fontSize: "0.75rem",
-
-                                      color: "var(--color-accent-emerald)",
-
-                                      marginTop: "2px",
+                                          : "var(--color-cream)",
 
                                     }}
 
                                   >
 
-                                    {bData.recommended_area_m2
+                                    {neededArea > 0
 
-                                      ? `${bData.recommended_area_m2.toFixed(1)} m²`
+                                      ? `~${neededArea.toFixed(1)} m²`
 
-                                      : "0 m²"}
+                                      : "0 m² (Ready)"}
 
-                                  </div>
+                                  </strong>
 
                                 </div>
 
-                              );
+                              </div>
 
-                            },
 
-                          )}
 
-                        </div>
+                              <button
+
+                                className="btn-space-focus"
+
+                                disabled={isAnalyzing}
+
+                                style={
+
+                                  isAnalyzing
+
+                                    ? { cursor: "not-allowed", opacity: 0.5 }
+
+                                    : {}
+
+                                }
+
+                                onClick={() => {
+
+                                  if (isAnalyzing) return;
+
+                                  setRoomType(key);
+
+                                  setActiveTab("treatment");
+
+                                }}
+
+                              >
+
+                                <span>Inspect {info.label} Details</span>
+
+                                <ArrowRight size={14} />
+
+                              </button>
+
+                            </div>
+
+                          );
+
+                        })}
 
                       </div>
-
-                    )}
-
-
-
-                    {/* DYNAMIC TREATMENT BREAKDOWN EXPLANATION */}
-
-                    {(() => {
-
-                      const mVal = Number(results.measuredT20 || 0.5);
-
-                      const tVal = Number(results.targetRT60 || 0.5);
-
-                      const delta = Number((mVal - tVal).toFixed(2));
-
-                      const totalArea = Number(results.neededArea || 0);
-
-                      const cornerTraps = (totalArea * 0.4).toFixed(1);
-
-                      const wallPanels = (totalArea * 0.35).toFixed(1);
-
-                      const rearDiffusers = (totalArea * 0.25).toFixed(1);
-
-
-
-                      // Bass ratio computation
-
-                      const b125 =
-
-                        results.bands?.["125"]?.measured_rt60_seconds ||
-
-                        mVal * 1.18;
-
-                      const b250 =
-
-                        results.bands?.["250"]?.measured_rt60_seconds ||
-
-                        mVal * 1.08;
-
-                      const b500 =
-
-                        results.bands?.["500"]?.measured_rt60_seconds || mVal;
-
-                      const b1k =
-
-                        results.bands?.["1000"]?.measured_rt60_seconds ||
-
-                        mVal * 0.95;
-
-                      const bassRatio = Number(
-
-                        ((b125 + b250) / (b500 + b1k)).toFixed(2),
-
-                      );
-
-
-
-                      let bassDesc =
-
-                        "Balanced low-frequency decay relative to mid frequencies (Optimal musical warmth).";
-
-                      if (bassRatio > 1.25) {
-
-                        bassDesc =
-
-                          "Boomy / Extended Lows (Bass decay is lingering significantly longer than mids. Heavy corner bass trapping is strongly advised).";
-
-                      } else if (bassRatio < 0.9) {
-
-                        bassDesc =
-
-                          "Lean / Over-Absorbed Bass (Low-frequency energy dissipates too quickly relative to mids, causing a thin acoustic timbre).";
-
-                      }
-
-
-
-                      return (
-
-                        <div className="dynamic-explanation-card">
-
-                          <div className="dynamic-card-title">
-
-                            <Sliders size={16} />
-
-                            <span>
-
-                              Dynamic Acoustic & Treatment Engineering Breakdown
-
-                            </span>
-
-                          </div>
-
-                          <div className="dynamic-explanation-grid">
-
-                            <div className="dynamic-sub-block">
-
-                              <div className="dynamic-sub-title">
-
-                                Reverberance Delta & Room Status
-
-                              </div>
-
-                              <p className="dynamic-text">
-
-                                Measured <strong>RT60 ({mVal}s)</strong> is{" "}
-
-                                {delta > 0
-
-                                  ? `${delta}s above`
-
-                                  : delta < 0
-
-                                    ? `${Math.abs(delta)}s below`
-
-                                    : "exactly at"}{" "}
-
-                                the target standard of <strong>{tVal}s</strong>{" "}
-
-                                for a{" "}
-
-                                {ALL_SPACES_CONFIG[roomType]?.label ||
-
-                                  "selected space"}
-
-                                .{" "}
-
-                                {delta > 0
-
-                                  ? "The space suffers from excessive flutter echo and specular reflections that degrade intelligibility."
-
-                                  : delta < 0
-
-                                    ? "The space is heavily damped/dead, potentially causing acoustic fatigue."
-
-                                    : "The room exhibits ideal decay characteristics conforming to ISO 3382 recommendations."}
-
-                              </p>
-
-                            </div>
-
-
-
-                            <div className="dynamic-sub-block">
-
-                              <div className="dynamic-sub-title">
-
-                                Bass Ratio (BR = {bassRatio})
-
-                              </div>
-
-                              <p className="dynamic-text">
-
-                                <strong>Tonal Balance:</strong> {bassDesc}
-
-                              </p>
-
-                            </div>
-
-
-
-                            <div
-
-                              className="dynamic-sub-block"
-
-                              style={{ gridColumn: "1 / -1" }}
-
-                            >
-
-                              <div className="dynamic-sub-title">
-
-                                3-Zone Material Placement Blueprint (
-
-                                {totalArea > 0
-
-                                  ? `~${totalArea} m² Total Absorption`
-
-                                  : "No Extra Panels Needed"}
-
-                                )
-
-                              </div>
-
-                              <p className="dynamic-text">
-
-                                {totalArea > 0 ? (
-
-                                  <>
-
-                                    1.{" "}
-
-                                    <strong>
-
-                                      Tri-Corner Bass Traps (~{cornerTraps} m²):
-
-                                    </strong>{" "}
-
-                                    Position thick porous traps (≥100mm mineral
-
-                                    wool with 50mm air gap) in vertical room
-
-                                    corners where axial standing wave pressure
-
-                                    peaks.
-
-                                    <br />
-
-                                    2.{" "}
-
-                                    <strong>
-
-                                      Lateral First-Reflection Mirrors (~
-
-                                      {wallPanels} m²):
-
-                                    </strong>{" "}
-
-                                    Mount broad-spectrum absorption panels on
-
-                                    side walls and ceiling clouds between
-
-                                    speakers and listener to prevent comb
-
-                                    filtering.
-
-                                    <br />
-
-                                    3.{" "}
-
-                                    <strong>
-
-                                      Rear Wall Diffusion/Scattering (~
-
-                                      {rearDiffusers} m²):
-
-                                    </strong>{" "}
-
-                                    Install 1D or 2D Quadratic Residue Diffusers
-
-                                    (QRD) or hybrid absorber-diffusers on the
-
-                                    back wall to preserve room liveliness and
-
-                                    spatial envelopment without flutter decay.
-
-                                  </>
-
-                                ) : (
-
-                                  <>
-
-                                    Current room finishes provide adequate
-
-                                    natural acoustic absorption. Maintain
-
-                                    symmetric furniture and diffuse book/record
-
-                                    shelves on the rear wall to keep acoustic
-
-                                    balance intact.
-
-                                  </>
-
-                                )}
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                      );
-
-                    })()}
-
-                  </div>
-
-                )}
-
-
-
-                {/* TAB 2: ROOM MODES */}
-
-                {activeTab === "roommodes" && (
-
-                  <div>
-
-                    <div
-
-                      className="results-title"
-
-                      style={{
-
-                        display: "flex",
-
-                        alignItems: "center",
-
-                        justifyContent: "space-between",
-
-                      }}
-
-                    >
-
-                      <div
-
-                        style={{
-
-                          display: "flex",
-
-                          alignItems: "center",
-
-                          gap: "8px",
-
-                        }}
-
-                      >
-
-                        <Grid size={20} color="var(--color-light-sage)" />
-
-                        <span>Low-Frequency Room Modes & Schroeder Cutoff</span>
-
-                      </div>
-
-                      <button
-
-                        type="button"
-
-                        onClick={(e) => {
-
-                          e.stopPropagation();
-
-                          setIsRoomModesModalOpen(true);
-
-                        }}
-
-                        style={{
-
-                          background: "rgba(74, 222, 128, 0.12)",
-
-                          border: "1px solid rgba(74, 222, 128, 0.3)",
-
-                          color: "var(--color-accent-emerald)",
-
-                          padding: "4px 12px",
-
-                          borderRadius: "999px",
-
-                          fontSize: "0.78rem",
-
-                          fontWeight: 600,
-
-                          cursor: "pointer",
-
-                          display: "flex",
-
-                          alignItems: "center",
-
-                          gap: "6px",
-
-                        }}
-
-                        title="Open Room Modes & Standing Waves Guide"
-
-                      >
-
-                        <Info size={14} />
-
-                        <span>Room Modes Science Guide</span>
-
-                      </button>
 
                     </div>
 
-                    {!roomModeData && (
+                  )}
 
-                      <div
 
-                        style={{
 
-                          textAlign: "center",
+                  {/* TAB 1: OVERVIEW & TREATMENT */}
 
-                          padding: "60px 20px",
+                  {activeTab === "treatment" && (
 
-                          color: "var(--color-text-dim)",
+                    <div>
 
-                        }}
+                      <div className="results-title">
 
-                      >
+                        <CheckCircle
 
-                        <Grid
+                          size={20}
 
-                          size={48}
-
-                          color="var(--color-text-muted)"
-
-                          style={{ marginBottom: "16px", opacity: 0.4 }}
+                          color="var(--color-accent-emerald)"
 
                         />
 
-                        <p
+                        <span>Reverberation & Treatment Results</span>
+
+                        <span
 
                           style={{
 
-                            fontSize: "1rem",
+                            marginLeft: "auto",
 
-                            marginBottom: "8px",
+                            fontSize: "0.78rem",
 
-                            color: "var(--color-cream)",
+                            padding: "4px 10px",
+
+                            borderRadius: "999px",
+
+                            background: "rgba(74, 222, 128, 0.15)",
+
+                            color: "var(--color-accent-emerald)",
+
+                            border: "1px solid rgba(74, 222, 128, 0.3)",
 
                           }}
 
                         >
 
-                          No Room Mode Data Yet
+                          {results.status}
 
-                        </p>
+                        </span>
 
-                        <p style={{ fontSize: "0.88rem", lineHeight: 1.6 }}>
+                      </div>
 
-                          Run an analysis first (with simulation mode enabled or
 
-                          an audio file uploaded) to compute low-frequency
 
-                          standing wave resonances for your room dimensions.
+                      <div className="metrics-row">
 
-                        </p>
+                        <div className="metric-card">
+
+                          <div className="metric-value">
+
+                            {results.measuredT20}s
+
+                          </div>
+
+                          <div className="metric-name">RT60 (T20)</div>
+
+                        </div>
+
+                        <div className="metric-card">
+
+                          <div className="metric-value">
+
+                            {results.measuredT30}s
+
+                          </div>
+
+                          <div className="metric-name">RT60 (T30)</div>
+
+                        </div>
+
+                        <div className="metric-card">
+
+                          <div
+
+                            className="metric-value"
+
+                            style={{ color: "var(--color-light-sage)" }}
+
+                          >
+
+                            {results.targetRT60}s
+
+                          </div>
+
+                          <div className="metric-name">Target RT60</div>
+
+                        </div>
+
+                        <div className="metric-card">
+
+                          <div
+
+                            className="metric-value"
+
+                            style={{ color: "var(--color-accent-amber)" }}
+
+                          >
+
+                            {results.rSquared}
+
+                          </div>
+
+                          <div className="metric-name">R² Fit Quality</div>
+
+                        </div>
+
+                        <div className="metric-card">
+
+                          <div
+
+                            className="metric-value"
+
+                            style={{ color: "var(--color-accent-emerald)" }}
+
+                          >
+
+                            ~{results.neededArea} m²
+
+                          </div>
+
+                          <div className="metric-name">Treatment Area</div>
+
+                        </div>
+
+                      </div>
+
+
+
+                      {/* SVG Schroeder Decay Curve */}
+
+                      <div className="chart-container">
+
+                        <div className="chart-header">
+
+                          <span>Schroeder Energy Decay Curve (dB vs Time)</span>
+
+                          <span>ISO 3382 Linear Regression Fit</span>
+
+                        </div>
+
+                        {(() => {
+
+                          const maxTime =
+
+                            results.points && results.points.length > 0
+
+                              ? Math.max(
+
+                                ...results.points.map(
+
+                                  (p) => Number(p.time) || 0,
+
+                                ),
+
+                              )
+
+                              : Math.max(
+
+                                1.0,
+
+                                Number(results.measuredT20 || 0.6) * 1.3,
+
+                              );
+
+                          const safeMaxTime = Math.max(0.4, maxTime);
+
+                          const tTicks = [0, 0.25, 0.5, 0.75, 1.0].map(
+
+                            (r) => r * safeMaxTime,
+
+                          );
+
+                          const xFit60 =
+
+                            45 +
+
+                            Math.min(
+
+                              1.0,
+
+                              Number(results.measuredT20 || 0.5) / safeMaxTime,
+
+                            ) *
+
+                            440;
+
+
+
+                          return (
+
+                            <svg
+
+                              viewBox="0 0 520 155"
+
+                              style={{
+
+                                width: "100%",
+
+                                height: "155px",
+
+                                display: "block",
+
+                              }}
+
+                            >
+
+                              {/* Grid horizontal dB lines */}
+
+                              <line
+
+                                x1="45"
+
+                                y1="20"
+
+                                x2="485"
+
+                                y2="20"
+
+                                stroke="rgba(255,255,255,0.08)"
+
+                                strokeDasharray="3 3"
+
+                              />
+
+                              <line
+
+                                x1="45"
+
+                                y1="52"
+
+                                x2="485"
+
+                                y2="52"
+
+                                stroke="rgba(255,255,255,0.08)"
+
+                                strokeDasharray="3 3"
+
+                              />
+
+                              <line
+
+                                x1="45"
+
+                                y1="83"
+
+                                x2="485"
+
+                                y2="83"
+
+                                stroke="rgba(255,255,255,0.08)"
+
+                                strokeDasharray="3 3"
+
+                              />
+
+                              <line
+
+                                x1="45"
+
+                                y1="115"
+
+                                x2="485"
+
+                                y2="115"
+
+                                stroke="rgba(255,255,255,0.15)"
+
+                              />
+
+
+
+                              {/* Axes */}
+
+                              <line
+
+                                x1="45"
+
+                                y1="15"
+
+                                x2="45"
+
+                                y2="115"
+
+                                stroke="rgba(255,255,255,0.4)"
+
+                              />
+
+                              <line
+
+                                x1="45"
+
+                                y1="115"
+
+                                x2="495"
+
+                                y2="115"
+
+                                stroke="rgba(255,255,255,0.4)"
+
+                              />
+
+
+
+                              {/* dB Y-Axis Labels */}
+
+                              <text
+
+                                x="38"
+
+                                y="24"
+
+                                fill="var(--color-text-muted)"
+
+                                fontSize="9"
+
+                                textAnchor="end"
+
+                              >
+
+                                0 dB
+
+                              </text>
+
+                              <text
+
+                                x="38"
+
+                                y="55"
+
+                                fill="var(--color-text-muted)"
+
+                                fontSize="9"
+
+                                textAnchor="end"
+
+                              >
+
+                                -20 dB
+
+                              </text>
+
+                              <text
+
+                                x="38"
+
+                                y="87"
+
+                                fill="var(--color-text-muted)"
+
+                                fontSize="9"
+
+                                textAnchor="end"
+
+                              >
+
+                                -40 dB
+
+                              </text>
+
+                              <text
+
+                                x="38"
+
+                                y="118"
+
+                                fill="var(--color-text-muted)"
+
+                                fontSize="9"
+
+                                textAnchor="end"
+
+                              >
+
+                                -60 dB
+
+                              </text>
+
+
+
+                              {/* Real Energy Decay Path */}
+
+                              <path
+
+                                d={renderSVGDecayPath(results.points)}
+
+                                fill="none"
+
+                                stroke="var(--color-accent-emerald)"
+
+                                strokeWidth="2.5"
+
+                              />
+
+
+
+                              {/* Linear Fit Slope */}
+
+                              <line
+
+                                x1="45"
+
+                                y1="20"
+
+                                x2={Math.min(485, xFit60)}
+
+                                y2="115"
+
+                                stroke="var(--color-accent-amber)"
+
+                                strokeWidth="1.8"
+
+                                strokeDasharray="4 4"
+
+                              />
+
+
+
+                              {/* X-Axis Time Ticks & Values */}
+
+                              {tTicks.map((t, idx) => {
+
+                                const xPos = 45 + (t / safeMaxTime) * 440;
+
+                                return (
+
+                                  <g key={idx}>
+
+                                    <line
+
+                                      x1={xPos}
+
+                                      y1="115"
+
+                                      x2={xPos}
+
+                                      y2="120"
+
+                                      stroke="rgba(255,255,255,0.3)"
+
+                                    />
+
+                                    <text
+
+                                      x={xPos}
+
+                                      y="132"
+
+                                      fill="var(--color-text-muted)"
+
+                                      fontSize="9"
+
+                                      textAnchor="middle"
+
+                                    >
+
+                                      {t.toFixed(2)}s
+
+                                    </text>
+
+                                  </g>
+
+                                );
+
+                              })}
+
+
+
+                              <text
+
+                                x="265"
+
+                                y="148"
+
+                                fill="var(--color-light-sage)"
+
+                                fontSize="9.5"
+
+                                fontWeight="600"
+
+                                textAnchor="middle"
+
+                              >
+
+                                ELAPSED TIME (SECONDS)
+
+                              </text>
+
+                            </svg>
+
+                          );
+
+                        })()}
+
+
+
+                        {/* Line Descriptions Guide */}
+
+                        <div className="graph-guide-container">
+
+                          <div className="graph-guide-header">
+
+                            <Activity size={14} />
+
+                            <span>Line Guide: What Each Line Indicates</span>
+
+                          </div>
+
+                          <div className="graph-lines-grid">
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    background: "#4ade80",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>Solid Emerald Line</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "#4ade80",
+
+                                    }}
+
+                                  >
+
+                                    Actual Decay
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>Schroeder Energy Decay:</strong> Shows
+
+                                  the real backwards-integrated acoustic energy
+
+                                  decaying over time from 0 dB to noise floor.
+
+                                  Steeper downward slope = faster sound
+
+                                  absorption.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    borderTop: "2px dashed #f59e0b",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>Dashed Amber Line</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "#f59e0b",
+
+                                    }}
+
+                                  >
+
+                                    ISO 3382 Slope
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>
+
+                                    Linear Regression Fit (T20/T30):
+
+                                  </strong>{" "}
+
+                                  The best-fit decay slope calculated between -5
+
+                                  dB and -25 dB (-35 dB for T30), extrapolated
+
+                                  across 60 dB to determine RT60.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "2px",
+
+                                    borderTop: "2px dotted rgba(255,255,255,0.4)",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>Dotted Gray Grid Lines</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "var(--color-text-dim)",
+
+                                    }}
+
+                                  >
+
+                                    Reference
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>Decibel Thresholds:</strong> 0 dB marks
+
+                                  peak impulse excitation; -30 dB is mid-decay
+
+                                  reference; -60 dB is the standard international
+
+                                  cutoff for complete decay.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "12px",
+
+                                    borderLeft: "2px solid rgba(255,255,255,0.4)",
+
+                                    borderBottom:
+
+                                      "2px solid rgba(255,255,255,0.4)",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>Coordinate Axes</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "var(--color-text-dim)",
+
+                                    }}
+
+                                  >
+
+                                    dB vs Time
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>Axes Measurement:</strong> Vertical
+
+                                  Y-axis measures sound level drop in decibels (0
+
+                                  to -60 dB); horizontal X-axis tracks elapsed
+
+                                  time in seconds.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+
+
+                      {/* Octave Band Treatment Table */}
+
+                      {results.bands && Object.keys(results.bands).length > 0 && (
+
+                        <div
+
+                          style={{
+
+                            marginTop: "16px",
+
+                            background: "rgba(10,15,11,0.5)",
+
+                            padding: "14px",
+
+                            borderRadius: "10px",
+
+                            border: "1px solid var(--glass-border)",
+
+                          }}
+
+                        >
+
+                          <span
+
+                            style={{
+
+                              fontSize: "0.8rem",
+
+                              color: "var(--color-light-sage)",
+
+                              textTransform: "uppercase",
+
+                              letterSpacing: "0.08em",
+
+                              fontWeight: 700,
+
+                            }}
+
+                          >
+
+                            Octave Band Absorption Deficit & Panel Area Breakdown
+
+                          </span>
+
+                          <div
+
+                            style={{
+
+                              display: "grid",
+
+                              gridTemplateColumns: "repeat(6, 1fr)",
+
+                              gap: "8px",
+
+                              marginTop: "10px",
+
+                              textAlign: "center",
+
+                            }}
+
+                          >
+
+                            {["125", "250", "500", "1000", "2000", "4000"].map(
+
+                              (band) => {
+
+                                const bData = results.bands[band] || {};
+
+                                return (
+
+                                  <div
+
+                                    key={band}
+
+                                    style={{
+
+                                      background: "rgba(40,61,41,0.4)",
+
+                                      padding: "8px 4px",
+
+                                      borderRadius: "6px",
+
+                                      border: "1px solid var(--glass-border)",
+
+                                    }}
+
+                                  >
+
+                                    <div
+
+                                      style={{
+
+                                        fontSize: "0.75rem",
+
+                                        color: "var(--color-text-muted)",
+
+                                      }}
+
+                                    >
+
+                                      {band} Hz
+
+                                    </div>
+
+                                    <div
+
+                                      style={{
+
+                                        fontSize: "0.88rem",
+
+                                        fontWeight: 700,
+
+                                        color: "var(--color-cream)",
+
+                                        marginTop: "2px",
+
+                                      }}
+
+                                    >
+
+                                      {bData.measured_rt60_seconds
+
+                                        ? bData.measured_rt60_seconds.toFixed(2)
+
+                                        : "--"}
+
+                                      s
+
+                                    </div>
+
+                                    <div
+
+                                      style={{
+
+                                        fontSize: "0.75rem",
+
+                                        color: "var(--color-accent-emerald)",
+
+                                        marginTop: "2px",
+
+                                      }}
+
+                                    >
+
+                                      {bData.recommended_area_m2
+
+                                        ? `${bData.recommended_area_m2.toFixed(1)} m²`
+
+                                        : "0 m²"}
+
+                                    </div>
+
+                                  </div>
+
+                                );
+
+                              },
+
+                            )}
+
+                          </div>
+
+                        </div>
+
+                      )}
+
+
+
+                      {/* DYNAMIC TREATMENT BREAKDOWN EXPLANATION */}
+
+                      {(() => {
+
+                        const mVal = Number(results.measuredT20 || 0.5);
+
+                        const tVal = Number(results.targetRT60 || 0.5);
+
+                        const delta = Number((mVal - tVal).toFixed(2));
+
+                        const totalArea = Number(results.neededArea || 0);
+
+                        const cornerTraps = (totalArea * 0.4).toFixed(1);
+
+                        const wallPanels = (totalArea * 0.35).toFixed(1);
+
+                        const rearDiffusers = (totalArea * 0.25).toFixed(1);
+
+
+
+                        // Bass ratio computation
+
+                        const b125 =
+
+                          results.bands?.["125"]?.measured_rt60_seconds ||
+
+                          mVal * 1.18;
+
+                        const b250 =
+
+                          results.bands?.["250"]?.measured_rt60_seconds ||
+
+                          mVal * 1.08;
+
+                        const b500 =
+
+                          results.bands?.["500"]?.measured_rt60_seconds || mVal;
+
+                        const b1k =
+
+                          results.bands?.["1000"]?.measured_rt60_seconds ||
+
+                          mVal * 0.95;
+
+                        const bassRatio = Number(
+
+                          ((b125 + b250) / (b500 + b1k)).toFixed(2),
+
+                        );
+
+
+
+                        let bassDesc =
+
+                          "Balanced low-frequency decay relative to mid frequencies (Optimal musical warmth).";
+
+                        if (bassRatio > 1.25) {
+
+                          bassDesc =
+
+                            "Boomy / Extended Lows (Bass decay is lingering significantly longer than mids. Heavy corner bass trapping is strongly advised).";
+
+                        } else if (bassRatio < 0.9) {
+
+                          bassDesc =
+
+                            "Lean / Over-Absorbed Bass (Low-frequency energy dissipates too quickly relative to mids, causing a thin acoustic timbre).";
+
+                        }
+
+
+
+                        return (
+
+                          <div className="dynamic-explanation-card">
+
+                            <div className="dynamic-card-title">
+
+                              <Sliders size={16} />
+
+                              <span>
+
+                                Dynamic Acoustic & Treatment Engineering Breakdown
+
+                              </span>
+
+                            </div>
+
+                            <div className="dynamic-explanation-grid">
+
+                              <div className="dynamic-sub-block">
+
+                                <div className="dynamic-sub-title">
+
+                                  Reverberance Delta & Room Status
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  Measured <strong>RT60 ({mVal}s)</strong> is{" "}
+
+                                  {delta > 0
+
+                                    ? `${delta}s above`
+
+                                    : delta < 0
+
+                                      ? `${Math.abs(delta)}s below`
+
+                                      : "exactly at"}{" "}
+
+                                  the target standard of <strong>{tVal}s</strong>{" "}
+
+                                  for a{" "}
+
+                                  {ALL_SPACES_CONFIG[roomType]?.label ||
+
+                                    "selected space"}
+
+                                  .{" "}
+
+                                  {delta > 0
+
+                                    ? "The space suffers from excessive flutter echo and specular reflections that degrade intelligibility."
+
+                                    : delta < 0
+
+                                      ? "The space is heavily damped/dead, potentially causing acoustic fatigue."
+
+                                      : "The room exhibits ideal decay characteristics conforming to ISO 3382 recommendations."}
+
+                                </p>
+
+                              </div>
+
+
+
+                              <div className="dynamic-sub-block">
+
+                                <div className="dynamic-sub-title">
+
+                                  Bass Ratio (BR = {bassRatio})
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  <strong>Tonal Balance:</strong> {bassDesc}
+
+                                </p>
+
+                              </div>
+
+
+
+                              <div
+
+                                className="dynamic-sub-block"
+
+                                style={{ gridColumn: "1 / -1" }}
+
+                              >
+
+                                <div className="dynamic-sub-title">
+
+                                  3-Zone Material Placement Blueprint (
+
+                                  {totalArea > 0
+
+                                    ? `~${totalArea} m² Total Absorption`
+
+                                    : "No Extra Panels Needed"}
+
+                                  )
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  {totalArea > 0 ? (
+
+                                    <>
+
+                                      1.{" "}
+
+                                      <strong>
+
+                                        Tri-Corner Bass Traps (~{cornerTraps} m²):
+
+                                      </strong>{" "}
+
+                                      Position thick porous traps (≥100mm mineral
+
+                                      wool with 50mm air gap) in vertical room
+
+                                      corners where axial standing wave pressure
+
+                                      peaks.
+
+                                      <br />
+
+                                      2.{" "}
+
+                                      <strong>
+
+                                        Lateral First-Reflection Mirrors (~
+
+                                        {wallPanels} m²):
+
+                                      </strong>{" "}
+
+                                      Mount broad-spectrum absorption panels on
+
+                                      side walls and ceiling clouds between
+
+                                      speakers and listener to prevent comb
+
+                                      filtering.
+
+                                      <br />
+
+                                      3.{" "}
+
+                                      <strong>
+
+                                        Rear Wall Diffusion/Scattering (~
+
+                                        {rearDiffusers} m²):
+
+                                      </strong>{" "}
+
+                                      Install 1D or 2D Quadratic Residue Diffusers
+
+                                      (QRD) or hybrid absorber-diffusers on the
+
+                                      back wall to preserve room liveliness and
+
+                                      spatial envelopment without flutter decay.
+
+                                    </>
+
+                                  ) : (
+
+                                    <>
+
+                                      Current room finishes provide adequate
+
+                                      natural acoustic absorption. Maintain
+
+                                      symmetric furniture and diffuse book/record
+
+                                      shelves on the rear wall to keep acoustic
+
+                                      balance intact.
+
+                                    </>
+
+                                  )}
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        );
+
+                      })()}
+
+                    </div>
+
+                  )}
+
+
+
+                  {/* TAB 2: ROOM MODES */}
+
+                  {activeTab === "roommodes" && (
+
+                    <div>
+
+                      <div
+
+                        className="results-title"
+
+                        style={{
+
+                          display: "flex",
+
+                          alignItems: "center",
+
+                          justifyContent: "space-between",
+
+                        }}
+
+                      >
+
+                        <div
+
+                          style={{
+
+                            display: "flex",
+
+                            alignItems: "center",
+
+                            gap: "8px",
+
+                          }}
+
+                        >
+
+                          <Grid size={20} color="var(--color-light-sage)" />
+
+                          <span>Low-Frequency Room Modes & Schroeder Cutoff</span>
+
+                        </div>
 
                         <button
 
@@ -5358,275 +5511,379 @@ export default function GeneratorPage() {
 
                           style={{
 
-                            marginTop: "20px",
+                            background: "rgba(74, 222, 128, 0.12)",
 
-                            background: "rgba(74,222,128,0.1)",
-
-                            border: "1px solid rgba(74,222,128,0.35)",
+                            border: "1px solid rgba(74, 222, 128, 0.3)",
 
                             color: "var(--color-accent-emerald)",
 
-                            padding: "8px 20px",
+                            padding: "4px 12px",
 
-                            borderRadius: "8px",
+                            borderRadius: "999px",
 
-                            cursor: "pointer",
-
-                            fontSize: "0.85rem",
+                            fontSize: "0.78rem",
 
                             fontWeight: 600,
 
+                            cursor: "pointer",
+
+                            display: "flex",
+
+                            alignItems: "center",
+
+                            gap: "6px",
+
                           }}
+
+                          title="Open Room Modes & Standing Waves Guide"
 
                         >
 
-                          Learn About Room Modes →
+                          <Info size={14} />
+
+                          <span>Room Modes Science Guide</span>
 
                         </button>
 
                       </div>
 
-                    )}
-
-                    {roomModeData && (
-
-                      <div>
+                      {!roomModeData && (
 
                         <div
 
                           style={{
 
-                            background: "rgba(40,61,41,0.5)",
+                            textAlign: "center",
 
-                            padding: "14px",
+                            padding: "60px 20px",
 
-                            borderRadius: "10px",
-
-                            border: "1px solid var(--glass-border)",
-
-                            marginBottom: "16px",
-
-                            display: "flex",
-
-                            justifyContent: "space-between",
-
-                            alignItems: "center",
+                            color: "var(--color-text-dim)",
 
                           }}
 
                         >
 
-                          <div>
+                          <Grid
 
-                            <span
+                            size={48}
 
-                              style={{
+                            color="var(--color-text-muted)"
 
-                                fontSize: "0.78rem",
+                            style={{ marginBottom: "16px", opacity: 0.4 }}
 
-                                color: "var(--color-text-muted)",
+                          />
 
-                                textTransform: "uppercase",
-
-                              }}
-
-                            >
-
-                              Schroeder Cutoff Frequency (f_s)
-
-                            </span>
-
-                            <div
-
-                              style={{
-
-                                fontSize: "1.4rem",
-
-                                fontWeight: 800,
-
-                                color: "var(--color-accent-amber)",
-
-                              }}
-
-                            >
-
-                              {roomModeData.schroeder_freq} Hz
-
-                            </div>
-
-                          </div>
-
-                          <div
+                          <p
 
                             style={{
 
-                              textAlign: "right",
+                              fontSize: "1rem",
 
-                              fontSize: "0.82rem",
+                              marginBottom: "8px",
 
-                              color: "var(--color-text-dim)",
+                              color: "var(--color-cream)",
 
                             }}
 
                           >
 
-                            Below {roomModeData.schroeder_freq} Hz, discrete
+                            No Room Mode Data Yet
 
-                            standing waves dominate acoustics.
+                          </p>
 
-                            <br />
+                          <p style={{ fontSize: "0.88rem", lineHeight: 1.6 }}>
 
-                            Total modes detected:{" "}
+                            Run an analysis first (with simulation mode enabled or
 
-                            <strong>{roomModeData.modes?.length || 0}</strong>
+                            an audio file uploaded) to compute low-frequency
 
-                          </div>
+                            standing wave resonances for your room dimensions.
+
+                          </p>
+
+                          <button
+
+                            type="button"
+
+                            onClick={(e) => {
+
+                              e.stopPropagation();
+
+                              setIsRoomModesModalOpen(true);
+
+                            }}
+
+                            style={{
+
+                              marginTop: "20px",
+
+                              background: "rgba(74,222,128,0.1)",
+
+                              border: "1px solid rgba(74,222,128,0.35)",
+
+                              color: "var(--color-accent-emerald)",
+
+                              padding: "8px 20px",
+
+                              borderRadius: "8px",
+
+                              cursor: "pointer",
+
+                              fontSize: "0.85rem",
+
+                              fontWeight: 600,
+
+                            }}
+
+                          >
+
+                            Learn About Room Modes →
+
+                          </button>
 
                         </div>
 
+                      )}
 
+                      {roomModeData && (
 
-                        {/* FFT & Mode Line Overlay Plot */}
-                        <div className="plot-card">
-                          <div className="plot-header" style={{ flexWrap: "wrap", gap: "10px" }}>
+                        <div>
+
+                          <div
+
+                            style={{
+
+                              background: "rgba(40,61,41,0.5)",
+
+                              padding: "14px",
+
+                              borderRadius: "10px",
+
+                              border: "1px solid var(--glass-border)",
+
+                              marginBottom: "16px",
+
+                              display: "flex",
+
+                              justifyContent: "space-between",
+
+                              alignItems: "center",
+
+                            }}
+
+                          >
+
                             <div>
-                              <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--color-cream)" }}>
-                                Room Resonances & FFT Spectrum (20–300 Hz)
+
+                              <span
+
+                                style={{
+
+                                  fontSize: "0.78rem",
+
+                                  color: "var(--color-text-muted)",
+
+                                  textTransform: "uppercase",
+
+                                }}
+
+                              >
+
+                                Schroeder Cutoff Frequency (f_s)
+
                               </span>
-                              <div style={{ fontSize: "0.78rem", color: "var(--color-text-dim)", marginTop: "2px" }}>
-                                Showing {((roomModeData.modes || []).filter(m => modeFilters[m.type])).length} of {roomModeData.modes?.length || 0} modes • Toggle categories to remove clutter
+
+                              <div
+
+                                style={{
+
+                                  fontSize: "1.4rem",
+
+                                  fontWeight: 800,
+
+                                  color: "var(--color-accent-amber)",
+
+                                }}
+
+                              >
+
+                                {roomModeData.schroeder_freq} Hz
+
+                              </div>
+
+                            </div>
+
+                            <div
+
+                              style={{
+
+                                textAlign: "right",
+
+                                fontSize: "0.82rem",
+
+                                color: "var(--color-text-dim)",
+
+                              }}
+
+                            >
+
+                              Below {roomModeData.schroeder_freq} Hz, discrete
+
+                              standing waves dominate acoustics.
+
+                              <br />
+
+                              Total modes detected:{" "}
+
+                              <strong>{roomModeData.modes?.length || 0}</strong>
+
+                            </div>
+
+                          </div>
+
+
+
+                          {/* FFT & Mode Line Overlay Plot */}
+                          <div className="plot-card">
+                            <div className="plot-header" style={{ flexWrap: "wrap", gap: "10px" }}>
+                              <div>
+                                <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--color-cream)" }}>
+                                  Room Resonances & FFT Spectrum (20–300 Hz)
+                                </span>
+                                <div style={{ fontSize: "0.78rem", color: "var(--color-text-dim)", marginTop: "2px" }}>
+                                  Showing {((roomModeData.modes || []).filter(m => modeFilters[m.type])).length} of {roomModeData.modes?.length || 0} modes • Toggle categories to remove clutter
+                                </div>
+                              </div>
+
+                              {/* Mode Filter Toggles */}
+                              <div className="legend-group" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setModeFilters(prev => ({ ...prev, axial: !prev.axial }))}
+                                  style={{
+                                    background: modeFilters.axial ? "rgba(74, 222, 128, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                    border: `1.5px solid ${modeFilters.axial ? "#4ade80" : "rgba(255, 255, 255, 0.15)"}`,
+                                    color: modeFilters.axial ? "#4ade80" : "var(--color-text-dim)",
+                                    padding: "4px 10px",
+                                    borderRadius: "999px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  title="Click to show/hide Axial modes (100% modal energy - wall-to-wall)"
+                                >
+                                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: modeFilters.axial ? "#4ade80" : "gray" }}></span>
+                                  <span>Axial (1D)</span>
+                                  <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>({roomModeData.modes?.filter(m => m.type === "axial").length || 0})</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setModeFilters(prev => ({ ...prev, tangential: !prev.tangential }))}
+                                  style={{
+                                    background: modeFilters.tangential ? "rgba(245, 158, 11, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                    border: `1.5px solid ${modeFilters.tangential ? "#f59e0b" : "rgba(255, 255, 255, 0.15)"}`,
+                                    color: modeFilters.tangential ? "#f59e0b" : "var(--color-text-dim)",
+                                    padding: "4px 10px",
+                                    borderRadius: "999px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  title="Click to show/hide Tangential modes (50% modal energy - 4 walls)"
+                                >
+                                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: modeFilters.tangential ? "#f59e0b" : "gray" }}></span>
+                                  <span>Tangential (2D)</span>
+                                  <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>({roomModeData.modes?.filter(m => m.type === "tangential").length || 0})</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setModeFilters(prev => ({ ...prev, oblique: !prev.oblique }))}
+                                  style={{
+                                    background: modeFilters.oblique ? "rgba(147, 168, 145, 0.22)" : "rgba(255, 255, 255, 0.05)",
+                                    border: `1.5px solid ${modeFilters.oblique ? "#93a891" : "rgba(255, 255, 255, 0.15)"}`,
+                                    color: modeFilters.oblique ? "#93a891" : "var(--color-text-dim)",
+                                    padding: "4px 10px",
+                                    borderRadius: "999px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  title="Click to show/hide Oblique modes (25% modal energy - 6 surfaces)"
+                                >
+                                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: modeFilters.oblique ? "#93a891" : "gray" }}></span>
+                                  <span>Oblique (3D)</span>
+                                  <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>({roomModeData.modes?.filter(m => m.type === "oblique").length || 0})</span>
+                                </button>
                               </div>
                             </div>
 
-                            {/* Mode Filter Toggles */}
-                            <div className="legend-group" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                              <button
-                                type="button"
-                                onClick={() => setModeFilters(prev => ({ ...prev, axial: !prev.axial }))}
-                                style={{
-                                  background: modeFilters.axial ? "rgba(74, 222, 128, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                                  border: `1.5px solid ${modeFilters.axial ? "#4ade80" : "rgba(255, 255, 255, 0.15)"}`,
-                                  color: modeFilters.axial ? "#4ade80" : "var(--color-text-dim)",
-                                  padding: "4px 10px",
-                                  borderRadius: "999px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 600,
-                                  cursor: "pointer",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  transition: "all 0.2s ease"
-                                }}
-                                title="Click to show/hide Axial modes (100% modal energy - wall-to-wall)"
-                              >
-                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: modeFilters.axial ? "#4ade80" : "gray" }}></span>
-                                <span>Axial (1D)</span>
-                                <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>({roomModeData.modes?.filter(m => m.type === "axial").length || 0})</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setModeFilters(prev => ({ ...prev, tangential: !prev.tangential }))}
-                                style={{
-                                  background: modeFilters.tangential ? "rgba(245, 158, 11, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                                  border: `1.5px solid ${modeFilters.tangential ? "#f59e0b" : "rgba(255, 255, 255, 0.15)"}`,
-                                  color: modeFilters.tangential ? "#f59e0b" : "var(--color-text-dim)",
-                                  padding: "4px 10px",
-                                  borderRadius: "999px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 600,
-                                  cursor: "pointer",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  transition: "all 0.2s ease"
-                                }}
-                                title="Click to show/hide Tangential modes (50% modal energy - 4 walls)"
-                              >
-                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: modeFilters.tangential ? "#f59e0b" : "gray" }}></span>
-                                <span>Tangential (2D)</span>
-                                <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>({roomModeData.modes?.filter(m => m.type === "tangential").length || 0})</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setModeFilters(prev => ({ ...prev, oblique: !prev.oblique }))}
-                                style={{
-                                  background: modeFilters.oblique ? "rgba(147, 168, 145, 0.22)" : "rgba(255, 255, 255, 0.05)",
-                                  border: `1.5px solid ${modeFilters.oblique ? "#93a891" : "rgba(255, 255, 255, 0.15)"}`,
-                                  color: modeFilters.oblique ? "#93a891" : "var(--color-text-dim)",
-                                  padding: "4px 10px",
-                                  borderRadius: "999px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 600,
-                                  cursor: "pointer",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  transition: "all 0.2s ease"
-                                }}
-                                title="Click to show/hide Oblique modes (25% modal energy - 6 surfaces)"
-                              >
-                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: modeFilters.oblique ? "#93a891" : "gray" }}></span>
-                                <span>Oblique (3D)</span>
-                                <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>({roomModeData.modes?.filter(m => m.type === "oblique").length || 0})</span>
-                              </button>
+                            {/* Hover Inspector Banner */}
+                            <div style={{
+                              margin: "10px 0 12px 0",
+                              padding: "8px 14px",
+                              background: "rgba(24, 38, 25, 0.65)",
+                              borderRadius: "8px",
+                              border: "1px solid rgba(74, 222, 128, 0.2)",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              fontSize: "0.8rem",
+                              flexWrap: "wrap",
+                              gap: "8px"
+                            }}>
+                              {hoveredModeInfo ? (
+                                <>
+                                  <span style={{ color: "var(--color-cream)" }}>
+                                    🎯 Frequency: <strong style={{ color: "var(--color-accent-amber)", fontSize: "0.95rem" }}>{hoveredModeInfo.freq} Hz</strong>
+                                    {hoveredModeInfo.nearestMode ? (
+                                      <> &bull; Matches <strong style={{ color: hoveredModeInfo.nearestMode.type === "axial" ? "#4ade80" : hoveredModeInfo.nearestMode.type === "tangential" ? "#f59e0b" : "#93a891" }}>{hoveredModeInfo.nearestMode.type.toUpperCase()}</strong> mode at {hoveredModeInfo.nearestMode.frequency} Hz (indices: {hoveredModeInfo.nearestMode.indices.join(",")})</>
+                                    ) : (
+                                      <span style={{ opacity: 0.65 }}> (No mode resonance at this exact Hz)</span>
+                                    )}
+                                  </span>
+                                  <span style={{ color: hoveredModeInfo.nearestMode?.type === "axial" ? "#4ade80" : "var(--color-accent-emerald)", fontWeight: 600 }}>
+                                    {hoveredModeInfo.nearestMode?.type === "axial" ? "⚠️ Primary Wall Resonance Peak" : "Acoustic Response"}
+                                  </span>
+                                </>
+                              ) : (
+                                <span style={{ color: "var(--color-text-dim)" }}>
+                                  💡 <strong>Tip:</strong> Hover your mouse across the plot to inspect exact frequencies and room modes.
+                                </span>
+                              )}
                             </div>
-                          </div>
 
-                          {/* Hover Inspector Banner */}
-                          <div style={{
-                            margin: "10px 0 12px 0",
-                            padding: "8px 14px",
-                            background: "rgba(24, 38, 25, 0.65)",
-                            borderRadius: "8px",
-                            border: "1px solid rgba(74, 222, 128, 0.2)",
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            fontSize: "0.8rem",
-                            flexWrap: "wrap",
-                            gap: "8px"
-                          }}>
-                            {hoveredModeInfo ? (
-                              <>
-                                <span style={{ color: "var(--color-cream)" }}>
-                                  🎯 Frequency: <strong style={{ color: "var(--color-accent-amber)", fontSize: "0.95rem" }}>{hoveredModeInfo.freq} Hz</strong>
-                                  {hoveredModeInfo.nearestMode ? (
-                                    <> &bull; Matches <strong style={{ color: hoveredModeInfo.nearestMode.type === "axial" ? "#4ade80" : hoveredModeInfo.nearestMode.type === "tangential" ? "#f59e0b" : "#93a891" }}>{hoveredModeInfo.nearestMode.type.toUpperCase()}</strong> mode at {hoveredModeInfo.nearestMode.frequency} Hz (indices: {hoveredModeInfo.nearestMode.indices.join(",")})</>
-                                  ) : (
-                                    <span style={{ opacity: 0.65 }}> (No mode resonance at this exact Hz)</span>
-                                  )}
-                                </span>
-                                <span style={{ color: hoveredModeInfo.nearestMode?.type === "axial" ? "#4ade80" : "var(--color-accent-emerald)", fontWeight: 600 }}>
-                                  {hoveredModeInfo.nearestMode?.type === "axial" ? "⚠️ Primary Wall Resonance Peak" : "Acoustic Response"}
-                                </span>
-                              </>
-                            ) : (
-                              <span style={{ color: "var(--color-text-dim)" }}>
-                                💡 <strong>Tip:</strong> Hover your mouse across the plot to inspect exact frequencies and room modes.
-                              </span>
-                            )}
-                          </div>
+                            {(() => {
+                              const plotL = 55, plotR = 490, plotT = 16, plotB = 185;
+                              const plotW = plotR - plotL, plotH = plotB - plotT;
+                              const fMin = 20, fMax = 300;
+                              const freqToX = (f) => plotL + ((f - fMin) / (fMax - fMin)) * plotW;
+                              const ampToY = (a) => plotB - Math.min(plotH, Math.max(0, a * plotH));
+                              const yGridLevels = [0, 0.25, 0.5, 0.75, 1.0];
+                              const xTicks = [20, 50, 100, 150, 200, 250, 300];
 
-                          {(() => {
-                            const plotL = 55, plotR = 490, plotT = 16, plotB = 185;
-                            const plotW = plotR - plotL, plotH = plotB - plotT;
-                            const fMin = 20, fMax = 300;
-                            const freqToX = (f) => plotL + ((f - fMin) / (fMax - fMin)) * plotW;
-                            const ampToY = (a) => plotB - Math.min(plotH, Math.max(0, a * plotH));
-                            const yGridLevels = [0, 0.25, 0.5, 0.75, 1.0];
-                            const xTicks = [20, 50, 100, 150, 200, 250, 300];
-                            
-                            const activeModes = (roomModeData.modes || []).filter(m => modeFilters[m.type]);
+                              const activeModes = (roomModeData.modes || []).filter(m => modeFilters[m.type]);
 
-                            const maxDataAmp =
-                              roomModeData.fft && roomModeData.fft.amplitudes.length > 0
-                                ? Math.max(...roomModeData.fft.amplitudes)
-                                : 1;
+                              const maxDataAmp =
+                                roomModeData.fft && roomModeData.fft.amplitudes.length > 0
+                                  ? Math.max(...roomModeData.fft.amplitudes)
+                                  : 1;
 
-                            const fftPath = roomModeData.fft
-                              ? roomModeData.fft.frequencies
+                              const fftPath = roomModeData.fft
+                                ? roomModeData.fft.frequencies
                                   .map((f, i) => {
                                     const x = freqToX(f);
                                     const raw = roomModeData.fft.amplitudes[i] || 0;
@@ -5638,772 +5895,554 @@ export default function GeneratorPage() {
                                     return `${i === 0 ? "M" : "L"} ${x.toFixed(1)},${y.toFixed(1)}`;
                                   })
                                   .join(" ")
-                              : null;
+                                : null;
 
-                            const schX = freqToX(Math.min(fMax, roomModeData.schroeder_freq || 140));
+                              const schX = freqToX(Math.min(fMax, roomModeData.schroeder_freq || 140));
 
-                            // Collision-free axial frequency label tracker
-                            let lastLabeledX = -999;
+                              // Collision-free axial frequency label tracker
+                              let lastLabeledX = -999;
 
-                            return (
-                              <svg
-                                viewBox="0 0 520 220"
-                                style={{ width: "100%", height: "220px", display: "block", cursor: "crosshair" }}
-                                onMouseMove={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const svgX = ((e.clientX - rect.left) / rect.width) * 520;
-                                  if (svgX >= plotL && svgX <= plotR) {
-                                    const freq = Math.round(fMin + ((svgX - plotL) / plotW) * (fMax - fMin));
-                                    const nearest = activeModes.find(m => Math.abs(m.frequency - freq) <= 4);
-                                    setHoveredModeInfo({ freq, nearestMode: nearest || null, svgX });
-                                  }
-                                }}
-                                onMouseLeave={() => setHoveredModeInfo(null)}
-                              >
-                                {/* Schroeder zone shading */}
-                                {roomModeData.schroeder_freq && schX > plotL && (
-                                  <rect
-                                    x={plotL}
-                                    y={plotT}
-                                    width={Math.min(plotW, Math.max(0, schX - plotL))}
-                                    height={plotH}
-                                    fill="rgba(229, 179, 100, 0.05)"
-                                  />
-                                )}
-
-                                {/* Horizontal grid lines + Y labels */}
-                                {yGridLevels.map((lvl) => {
-                                  const y = ampToY(lvl);
-                                  return (
-                                    <g key={`ygrid-${lvl}`}>
-                                      <line
-                                        x1={plotL}
-                                        y1={y}
-                                        x2={plotR}
-                                        y2={y}
-                                        stroke={lvl === 0 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.07)"}
-                                        strokeWidth="1"
-                                      />
-                                      <text
-                                        x={plotL - 6}
-                                        y={y + 3}
-                                        fill="var(--color-text-muted)"
-                                        fontSize="8"
-                                        fontFamily="monospace"
-                                        textAnchor="end"
-                                      >
-                                        {(lvl * 100).toFixed(0)}%
-                                      </text>
-                                    </g>
-                                  );
-                                })}
-
-                                {/* X-axis ticks */}
-                                {xTicks.map((f) => {
-                                  const x = freqToX(f);
-                                  return (
-                                    <g key={`xt-${f}`}>
-                                      <line
-                                        x1={x}
-                                        y1={plotB}
-                                        x2={x}
-                                        y2={plotB + 4}
-                                        stroke="rgba(255,255,255,0.3)"
-                                        strokeWidth="1"
-                                      />
-                                      <text
-                                        x={x}
-                                        y={plotB + 14}
-                                        fill="var(--color-text-muted)"
-                                        fontSize="8"
-                                        fontFamily="monospace"
-                                        textAnchor="middle"
-                                      >
-                                        {f}
-                                      </text>
-                                    </g>
-                                  );
-                                })}
-
-                                <text
-                                  x={(plotL + plotR) / 2}
-                                  y={plotB + 28}
-                                  fill="var(--color-text-dim)"
-                                  fontSize="8.5"
-                                  fontWeight="600"
-                                  textAnchor="middle"
+                              return (
+                                <svg
+                                  viewBox="0 0 520 220"
+                                  style={{ width: "100%", height: "220px", display: "block", cursor: "crosshair" }}
+                                  onMouseMove={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const svgX = ((e.clientX - rect.left) / rect.width) * 520;
+                                    if (svgX >= plotL && svgX <= plotR) {
+                                      const freq = Math.round(fMin + ((svgX - plotL) / plotW) * (fMax - fMin));
+                                      const nearest = activeModes.find(m => Math.abs(m.frequency - freq) <= 4);
+                                      setHoveredModeInfo({ freq, nearestMode: nearest || null, svgX });
+                                    }
+                                  }}
+                                  onMouseLeave={() => setHoveredModeInfo(null)}
                                 >
-                                  Frequency (Hz)
-                                </text>
-
-                                {/* Schroeder cutoff vertical dashed line */}
-                                {roomModeData.schroeder_freq && schX <= plotR && (
-                                  <g>
-                                    <line
-                                      x1={schX}
-                                      y1={plotT}
-                                      x2={schX}
-                                      y2={plotB}
-                                      stroke="var(--color-accent-amber)"
-                                      strokeWidth="1.5"
-                                      strokeDasharray="5 3"
-                                      opacity="0.8"
+                                  {/* Schroeder zone shading */}
+                                  {roomModeData.schroeder_freq && schX > plotL && (
+                                    <rect
+                                      x={plotL}
+                                      y={plotT}
+                                      width={Math.min(plotW, Math.max(0, schX - plotL))}
+                                      height={plotH}
+                                      fill="rgba(229, 179, 100, 0.05)"
                                     />
-                                    <text
-                                      x={schX + 4}
-                                      y={plotT + 12}
-                                      fill="var(--color-accent-amber)"
-                                      fontSize="7.5"
-                                      fontWeight="700"
-                                    >
-                                      f_s {roomModeData.schroeder_freq} Hz
-                                    </text>
-                                  </g>
-                                )}
+                                  )}
 
-                                {/* Mode Lines filtered by user selection */}
-                                {activeModes.map((m, idx) => {
-                                  const x = freqToX(m.frequency);
-                                  if (x < plotL || x > plotR) return null;
-                                  const color =
-                                    m.type === "axial"
-                                      ? "#4ade80"
-                                      : m.type === "tangential"
-                                        ? "#f59e0b"
-                                        : "#93a891";
-                                  const dash =
-                                    m.type === "axial"
-                                      ? "none"
-                                      : m.type === "tangential"
-                                        ? "5 2"
-                                        : "2 2";
-                                  const lineW =
-                                    m.type === "axial" ? 1.8 : m.type === "tangential" ? 1.3 : 0.9;
-                                  
-                                  // Clean non-colliding labels for axial modes
-                                  let canLabel = false;
-                                  if (m.type === "axial" && (x - lastLabeledX >= 28)) {
-                                    canLabel = true;
-                                    lastLabeledX = x;
-                                  }
+                                  {/* Horizontal grid lines + Y labels */}
+                                  {yGridLevels.map((lvl) => {
+                                    const y = ampToY(lvl);
+                                    return (
+                                      <g key={`ygrid-${lvl}`}>
+                                        <line
+                                          x1={plotL}
+                                          y1={y}
+                                          x2={plotR}
+                                          y2={y}
+                                          stroke={lvl === 0 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.07)"}
+                                          strokeWidth="1"
+                                        />
+                                        <text
+                                          x={plotL - 6}
+                                          y={y + 3}
+                                          fill="var(--color-text-muted)"
+                                          fontSize="8"
+                                          fontFamily="monospace"
+                                          textAnchor="end"
+                                        >
+                                          {(lvl * 100).toFixed(0)}%
+                                        </text>
+                                      </g>
+                                    );
+                                  })}
 
-                                  return (
-                                    <g key={`mode-${idx}`}>
+                                  {/* X-axis ticks */}
+                                  {xTicks.map((f) => {
+                                    const x = freqToX(f);
+                                    return (
+                                      <g key={`xt-${f}`}>
+                                        <line
+                                          x1={x}
+                                          y1={plotB}
+                                          x2={x}
+                                          y2={plotB + 4}
+                                          stroke="rgba(255,255,255,0.3)"
+                                          strokeWidth="1"
+                                        />
+                                        <text
+                                          x={x}
+                                          y={plotB + 14}
+                                          fill="var(--color-text-muted)"
+                                          fontSize="8"
+                                          fontFamily="monospace"
+                                          textAnchor="middle"
+                                        >
+                                          {f}
+                                        </text>
+                                      </g>
+                                    );
+                                  })}
+
+                                  <text
+                                    x={(plotL + plotR) / 2}
+                                    y={plotB + 28}
+                                    fill="var(--color-text-dim)"
+                                    fontSize="8.5"
+                                    fontWeight="600"
+                                    textAnchor="middle"
+                                  >
+                                    Frequency (Hz)
+                                  </text>
+
+                                  {/* Schroeder cutoff vertical dashed line */}
+                                  {roomModeData.schroeder_freq && schX <= plotR && (
+                                    <g>
                                       <line
-                                        x1={x}
-                                        y1={plotT + 4}
-                                        x2={x}
+                                        x1={schX}
+                                        y1={plotT}
+                                        x2={schX}
                                         y2={plotB}
-                                        stroke={color}
-                                        strokeWidth={lineW}
-                                        strokeDasharray={dash}
-                                        opacity={m.type === "axial" ? "0.85" : "0.55"}
+                                        stroke="var(--color-accent-amber)"
+                                        strokeWidth="1.5"
+                                        strokeDasharray="5 3"
+                                        opacity="0.8"
                                       />
-                                      {canLabel && (
-                                        <g>
-                                          <rect
-                                            x={x - 14}
-                                            y={plotT - 12}
-                                            width="28"
-                                            height="11"
-                                            rx="2"
-                                            fill="rgba(10, 20, 12, 0.85)"
-                                            stroke="rgba(74, 222, 128, 0.4)"
-                                            strokeWidth="0.8"
-                                          />
-                                          <text
-                                            x={x}
-                                            y={plotT - 4}
-                                            fill="#4ade80"
-                                            fontSize="7"
-                                            fontFamily="monospace"
-                                            fontWeight="700"
-                                            textAnchor="middle"
-                                          >
-                                            {m.frequency}
-                                          </text>
-                                        </g>
-                                      )}
-                                      <title>{m.type} mode: {m.frequency} Hz (indices: {m.indices.join(",")})</title>
+                                      <text
+                                        x={schX + 4}
+                                        y={plotT + 12}
+                                        fill="var(--color-accent-amber)"
+                                        fontSize="7.5"
+                                        fontWeight="700"
+                                      >
+                                        f_s {roomModeData.schroeder_freq} Hz
+                                      </text>
                                     </g>
-                                  );
-                                })}
+                                  )}
 
-                                {/* Measured/Simulated FFT curve */}
-                                {fftPath && (
-                                  <path
-                                    d={fftPath}
-                                    fill="none"
-                                    stroke="var(--color-cream)"
-                                    strokeWidth="2.2"
-                                    strokeLinejoin="round"
-                                  />
-                                )}
+                                  {/* Mode Lines filtered by user selection */}
+                                  {activeModes.map((m, idx) => {
+                                    const x = freqToX(m.frequency);
+                                    if (x < plotL || x > plotR) return null;
+                                    const color =
+                                      m.type === "axial"
+                                        ? "#4ade80"
+                                        : m.type === "tangential"
+                                          ? "#f59e0b"
+                                          : "#93a891";
+                                    const dash =
+                                      m.type === "axial"
+                                        ? "none"
+                                        : m.type === "tangential"
+                                          ? "5 2"
+                                          : "2 2";
+                                    const lineW =
+                                      m.type === "axial" ? 1.8 : m.type === "tangential" ? 1.3 : 0.9;
 
-                                {/* Interactive Hover Tracker Line */}
-                                {hoveredModeInfo && (
-                                  <g>
-                                    <line
-                                      x1={hoveredModeInfo.svgX}
-                                      y1={plotT}
-                                      x2={hoveredModeInfo.svgX}
-                                      y2={plotB}
-                                      stroke="rgba(255, 255, 255, 0.7)"
-                                      strokeWidth="1.2"
-                                      strokeDasharray="3 3"
+                                    // Clean non-colliding labels for axial modes
+                                    let canLabel = false;
+                                    if (m.type === "axial" && (x - lastLabeledX >= 28)) {
+                                      canLabel = true;
+                                      lastLabeledX = x;
+                                    }
+
+                                    return (
+                                      <g key={`mode-${idx}`}>
+                                        <line
+                                          x1={x}
+                                          y1={plotT + 4}
+                                          x2={x}
+                                          y2={plotB}
+                                          stroke={color}
+                                          strokeWidth={lineW}
+                                          strokeDasharray={dash}
+                                          opacity={m.type === "axial" ? "0.85" : "0.55"}
+                                        />
+                                        {canLabel && (
+                                          <g>
+                                            <rect
+                                              x={x - 14}
+                                              y={plotT - 12}
+                                              width="28"
+                                              height="11"
+                                              rx="2"
+                                              fill="rgba(10, 20, 12, 0.85)"
+                                              stroke="rgba(74, 222, 128, 0.4)"
+                                              strokeWidth="0.8"
+                                            />
+                                            <text
+                                              x={x}
+                                              y={plotT - 4}
+                                              fill="#4ade80"
+                                              fontSize="7"
+                                              fontFamily="monospace"
+                                              fontWeight="700"
+                                              textAnchor="middle"
+                                            >
+                                              {m.frequency}
+                                            </text>
+                                          </g>
+                                        )}
+                                        <title>{m.type} mode: {m.frequency} Hz (indices: {m.indices.join(",")})</title>
+                                      </g>
+                                    );
+                                  })}
+
+                                  {/* Measured/Simulated FFT curve */}
+                                  {fftPath && (
+                                    <path
+                                      d={fftPath}
+                                      fill="none"
+                                      stroke="var(--color-cream)"
+                                      strokeWidth="2.2"
+                                      strokeLinejoin="round"
                                     />
-                                    <circle
-                                      cx={hoveredModeInfo.svgX}
-                                      cy={plotT + 2}
-                                      r="3"
-                                      fill="var(--color-accent-amber)"
-                                    />
-                                  </g>
-                                )}
+                                  )}
 
-                                {/* Y-axis caption */}
-                                <text
-                                  x="12"
-                                  y={plotT + plotH / 2}
-                                  fill="var(--color-text-dim)"
-                                  fontSize="8"
-                                  fontWeight="600"
-                                  textAnchor="middle"
-                                  transform={`rotate(-90 12 ${plotT + plotH / 2})`}
-                                >
-                                  Relative Amplitude
-                                </text>
-                              </svg>
-                            );
-                          })()}
+                                  {/* Interactive Hover Tracker Line */}
+                                  {hoveredModeInfo && (
+                                    <g>
+                                      <line
+                                        x1={hoveredModeInfo.svgX}
+                                        y1={plotT}
+                                        x2={hoveredModeInfo.svgX}
+                                        y2={plotB}
+                                        stroke="rgba(255, 255, 255, 0.7)"
+                                        strokeWidth="1.2"
+                                        strokeDasharray="3 3"
+                                      />
+                                      <circle
+                                        cx={hoveredModeInfo.svgX}
+                                        cy={plotT + 2}
+                                        r="3"
+                                        fill="var(--color-accent-amber)"
+                                      />
+                                    </g>
+                                  )}
 
-                          {/* Quick Acoustic Takeaway Box */}
-                          <div style={{
-                            marginTop: "14px",
-                            padding: "12px 16px",
-                            background: "rgba(255, 255, 255, 0.03)",
-                            borderRadius: "8px",
-                            border: "1px solid rgba(255, 255, 255, 0.08)",
-                            fontSize: "0.82rem",
-                            lineHeight: "1.5"
-                          }}>
-                            <div style={{ fontWeight: 700, color: "var(--color-cream)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                              <span>🔎</span> <span>Primary Problem Frequencies (Wall-to-Wall Standing Waves):</span>
-                            </div>
-                            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
-                              {(roomModeData.modes || [])
-                                .filter(m => m.type === "axial")
-                                .slice(0, 4)
-                                .map((m, i) => {
-                                  const axis = m.indices[0] > 0 ? "Length (Front/Back)" : m.indices[1] > 0 ? "Width (Left/Right)" : "Height (Floor/Ceiling)";
-                                  return (
-                                    <div key={i} style={{ background: "rgba(74, 222, 128, 0.1)", border: "1px solid rgba(74, 222, 128, 0.3)", padding: "4px 10px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                      <strong style={{ color: "#4ade80" }}>{m.frequency} Hz</strong>
-                                      <span style={{ color: "var(--color-text-dim)", fontSize: "0.76rem" }}>({axis})</span>
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                            <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.77rem" }}>
-                              <strong>What to do:</strong> These low frequencies carry the most energy. When sound waves hit opposing walls at these pitches, they reinforce each other and sound boomy. Placing bass traps in room corners or along these boundaries absorbs this energy and flattens your bass response.
-                            </p>
-                          </div>
+                                  {/* Y-axis caption */}
+                                  <text
+                                    x="12"
+                                    y={plotT + plotH / 2}
+                                    fill="var(--color-text-dim)"
+                                    fontSize="8"
+                                    fontWeight="600"
+                                    textAnchor="middle"
+                                    transform={`rotate(-90 12 ${plotT + plotH / 2})`}
+                                  >
+                                    Relative Amplitude
+                                  </text>
+                                </svg>
+                              );
+                            })()}
 
-                        {/* Room Modes Line Descriptions Guide */}
-
-                          <div className="graph-guide-container">
-
-                            <div className="graph-guide-header">
-
-                              <Grid size={14} />
-
-                              <span>
-
-                                Line Guide: What Each Line & Zone Indicates
-
-                              </span>
-
+                            {/* Quick Acoustic Takeaway Box */}
+                            <div style={{
+                              marginTop: "14px",
+                              padding: "12px 16px",
+                              background: "rgba(255, 255, 255, 0.03)",
+                              borderRadius: "8px",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontSize: "0.82rem",
+                              lineHeight: "1.5"
+                            }}>
+                              <div style={{ fontWeight: 700, color: "var(--color-cream)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span>🔎</span> <span>Primary Problem Frequencies (Wall-to-Wall Standing Waves):</span>
+                              </div>
+                              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
+                                {(roomModeData.modes || [])
+                                  .filter(m => m.type === "axial")
+                                  .slice(0, 4)
+                                  .map((m, i) => {
+                                    const axis = m.indices[0] > 0 ? "Length (Front/Back)" : m.indices[1] > 0 ? "Width (Left/Right)" : "Height (Floor/Ceiling)";
+                                    return (
+                                      <div key={i} style={{ background: "rgba(74, 222, 128, 0.1)", border: "1px solid rgba(74, 222, 128, 0.3)", padding: "4px 10px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <strong style={{ color: "#4ade80" }}>{m.frequency} Hz</strong>
+                                        <span style={{ color: "var(--color-text-dim)", fontSize: "0.76rem" }}>({axis})</span>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                              <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.77rem" }}>
+                                <strong>What to do:</strong> These low frequencies carry the most energy. When sound waves hit opposing walls at these pitches, they reinforce each other and sound boomy. Placing bass traps in room corners or along these boundaries absorbs this energy and flattens your bass response.
+                              </p>
                             </div>
 
-                            <div className="graph-lines-grid">
+                            {/* Room Modes Line Descriptions Guide */}
 
-                              <div className="graph-line-card">
+                            <div className="graph-guide-container">
 
-                                <div className="line-swatch-box">
+                              <div className="graph-guide-header">
 
-                                  <div
-
-                                    style={{
-
-                                      width: "100%",
-
-                                      height: "3px",
-
-                                      background: "var(--color-cream)",
-
-                                      borderRadius: "2px",
-
-                                    }}
-
-                                  ></div>
-
-                                </div>
-
-                                <div className="line-guide-info">
-
-                                  <div className="line-guide-title">
-
-                                    <span>Solid Cream Curve</span>
-
-                                    <span
-
-                                      style={{
-
-                                        fontSize: "0.7rem",
-
-                                        color: "var(--color-cream)",
-
-                                      }}
-
-                                    >
-
-                                      FFT Spectrum
-
-                                    </span>
-
-                                  </div>
-
-                                  <p className="line-guide-desc">
-
-                                    <strong>
-
-                                      Measured FFT Magnitude (20–300 Hz):
-
-                                    </strong>{" "}
-
-                                    Real frequency response. Prominent peaks
-
-                                    indicate boomy resonant frequency buildups;
-
-                                    troughs show phase cancellation bass nulls.
-
-                                  </p>
-
-                                </div>
-
-                              </div>
-
-
-
-                              <div className="graph-line-card">
-
-                                <div className="line-swatch-box">
-
-                                  <div
-
-                                    style={{
-
-                                      width: "3px",
-
-                                      height: "16px",
-
-                                      background: "#4ade80",
-
-                                      margin: "0 auto",
-
-                                      borderRadius: "1px",
-
-                                    }}
-
-                                  ></div>
-
-                                </div>
-
-                                <div className="line-guide-info">
-
-                                  <div className="line-guide-title">
-
-                                    <span>Solid Green Line</span>
-
-                                    <span
-
-                                      style={{
-
-                                        fontSize: "0.7rem",
-
-                                        color: "#4ade80",
-
-                                      }}
-
-                                    >
-
-                                      Axial (1D)
-
-                                    </span>
-
-                                  </div>
-
-                                  <p className="line-guide-desc">
-
-                                    <strong>Axial Room Modes:</strong> Standing
-
-                                    waves between 2 opposing parallel boundaries
-
-                                    (L, W, or H). Possesses 100% modal energy;
-
-                                    primary cause of muddy bass and room
-
-                                    ringing.
-
-                                  </p>
-
-                                </div>
-
-                              </div>
-
-
-
-                              <div className="graph-line-card">
-
-                                <div className="line-swatch-box">
-
-                                  <div
-
-                                    style={{
-
-                                      width: "3px",
-
-                                      height: "16px",
-
-                                      borderLeft: "2px dashed #f59e0b",
-
-                                      margin: "0 auto",
-
-                                    }}
-
-                                  ></div>
-
-                                </div>
-
-                                <div className="line-guide-info">
-
-                                  <div className="line-guide-title">
-
-                                    <span>Dashed Amber Line</span>
-
-                                    <span
-
-                                      style={{
-
-                                        fontSize: "0.7rem",
-
-                                        color: "#f59e0b",
-
-                                      }}
-
-                                    >
-
-                                      Tangential (2D)
-
-                                    </span>
-
-                                  </div>
-
-                                  <p className="line-guide-desc">
-
-                                    <strong>Tangential Room Modes:</strong>{" "}
-
-                                    Standing waves reflecting between 4 room
-
-                                    boundaries. Carries ~50% the energy of axial
-
-                                    modes with moderate damping.
-
-                                  </p>
-
-                                </div>
-
-                              </div>
-
-
-
-                              <div className="graph-line-card">
-
-                                <div className="line-swatch-box">
-
-                                  <div
-
-                                    style={{
-
-                                      width: "3px",
-
-                                      height: "16px",
-
-                                      borderLeft: "2px dotted #93a891",
-
-                                      margin: "0 auto",
-
-                                    }}
-
-                                  ></div>
-
-                                </div>
-
-                                <div className="line-guide-info">
-
-                                  <div className="line-guide-title">
-
-                                    <span>Dotted Sage Line</span>
-
-                                    <span
-
-                                      style={{
-
-                                        fontSize: "0.7rem",
-
-                                        color: "#93a891",
-
-                                      }}
-
-                                    >
-
-                                      Oblique (3D)
-
-                                    </span>
-
-                                  </div>
-
-                                  <p className="line-guide-desc">
-
-                                    <strong>Oblique Room Modes:</strong>{" "}
-
-                                    Corner-to-corner standing waves bouncing
-
-                                    between all 6 surfaces. Carries ~25% energy
-
-                                    and decays rapidly.
-
-                                  </p>
-
-                                </div>
-
-                              </div>
-
-
-
-                              <div
-
-                                className="graph-line-card"
-
-                                style={{ gridColumn: "1 / -1" }}
-
-                              >
-
-                                <div className="line-swatch-box">
-
-                                  <div
-
-                                    style={{
-
-                                      width: "20px",
-
-                                      height: "14px",
-
-                                      background: "rgba(229, 179, 100, 0.25)",
-
-                                      border:
-
-                                        "1px solid rgba(229, 179, 100, 0.5)",
-
-                                      borderRadius: "3px",
-
-                                    }}
-
-                                  ></div>
-
-                                </div>
-
-                                <div className="line-guide-info">
-
-                                  <div className="line-guide-title">
-
-                                    <span>
-
-                                      Shaded Amber Region (Below{" "}
-
-                                      {roomModeData.schroeder_freq} Hz)
-
-                                    </span>
-
-                                    <span
-
-                                      style={{
-
-                                        fontSize: "0.7rem",
-
-                                        color: "var(--color-accent-amber)",
-
-                                      }}
-
-                                    >
-
-                                      Schroeder Modal Zone
-
-                                    </span>
-
-                                  </div>
-
-                                  <p className="line-guide-desc">
-
-                                    <strong>Modal Zone:</strong> Discrete
-
-                                    resonant standing waves dominate room
-
-                                    behavior in this shaded zone. Above the
-
-                                    Schroeder cutoff frequency (
-
-                                    {roomModeData.schroeder_freq} Hz), modal
-
-                                    density increases and transitions into a
-
-                                    statistical, diffuse reverberation sound
-
-                                    field.
-
-                                  </p>
-
-                                </div>
-
-                              </div>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-
-
-                        {/* DYNAMIC ROOM MODES BREAKDOWN EXPLANATION */}
-
-                        {(() => {
-
-                          const lVal = Number(lengthM || 6);
-
-                          const wVal = Number(widthM || 4);
-
-                          const hVal = Number(heightM || 2.8);
-
-                          const c = 343;
-
-                          const fL = Number((c / (2 * lVal)).toFixed(1));
-
-                          const fW = Number((c / (2 * wVal)).toFixed(1));
-
-                          const fH = Number((c / (2 * hVal)).toFixed(1));
-
-
-
-                          const ratioLW = (lVal / wVal).toFixed(2);
-
-                          const isDegenerate =
-
-                            Math.abs(lVal - wVal) < 0.2 ||
-
-                            Math.abs(lVal - hVal) < 0.2 ||
-
-                            Math.abs(wVal - hVal) < 0.2;
-
-                          const fs = roomModeData.schroeder_freq || 140;
-
-
-
-                          return (
-
-                            <div className="dynamic-explanation-card">
-
-                              <div className="dynamic-card-title">
-
-                                <Grid size={16} />
+                                <Grid size={14} />
 
                                 <span>
 
-                                  Dynamic Modal Resonance & Standing Wave
-
-                                  Analysis
+                                  Line Guide: What Each Line & Zone Indicates
 
                                 </span>
 
                               </div>
 
-                              <div className="dynamic-explanation-grid">
+                              <div className="graph-lines-grid">
 
-                                <div className="dynamic-sub-block">
+                                <div className="graph-line-card">
 
-                                  <div className="dynamic-sub-title">
+                                  <div className="line-swatch-box">
 
-                                    Fundamental Axial Modes (f₁₀₀, f₀₁₀, f₀₀₁)
+                                    <div
+
+                                      style={{
+
+                                        width: "100%",
+
+                                        height: "3px",
+
+                                        background: "var(--color-cream)",
+
+                                        borderRadius: "2px",
+
+                                      }}
+
+                                    ></div>
 
                                   </div>
 
-                                  <p className="dynamic-text">
+                                  <div className="line-guide-info">
 
-                                    • <strong>Length Mode (1,0,0):</strong> {fL}{" "}
+                                    <div className="line-guide-title">
 
-                                    Hz (Strongest along front-to-back listening
+                                      <span>Solid Cream Curve</span>
 
-                                    axis)
+                                      <span
 
-                                    <br />• <strong>
+                                        style={{
 
-                                      Width Mode (0,1,0):
+                                          fontSize: "0.7rem",
 
-                                    </strong>{" "}
+                                          color: "var(--color-cream)",
 
-                                    {fW} Hz (Causes side-to-side listener ear
+                                        }}
 
-                                    imbalances)
+                                      >
 
-                                    <br />•{" "}
+                                        FFT Spectrum
 
-                                    <strong>Height Mode (0,0,1):</strong> {fH}{" "}
+                                      </span>
 
-                                    Hz (Floor-to-ceiling vertical standing wave)
+                                    </div>
 
-                                  </p>
+                                    <p className="line-guide-desc">
+
+                                      <strong>
+
+                                        Measured FFT Magnitude (20–300 Hz):
+
+                                      </strong>{" "}
+
+                                      Real frequency response. Prominent peaks
+
+                                      indicate boomy resonant frequency buildups;
+
+                                      troughs show phase cancellation bass nulls.
+
+                                    </p>
+
+                                  </div>
 
                                 </div>
 
 
 
-                                <div className="dynamic-sub-block">
+                                <div className="graph-line-card">
 
-                                  <div className="dynamic-sub-title">
+                                  <div className="line-swatch-box">
 
-                                    Aspect Ratio & Modal Density
+                                    <div
+
+                                      style={{
+
+                                        width: "3px",
+
+                                        height: "16px",
+
+                                        background: "#4ade80",
+
+                                        margin: "0 auto",
+
+                                        borderRadius: "1px",
+
+                                      }}
+
+                                    ></div>
 
                                   </div>
 
-                                  <p className="dynamic-text">
+                                  <div className="line-guide-info">
 
-                                    Dimension ratio is{" "}
+                                    <div className="line-guide-title">
 
-                                    <strong>
+                                      <span>Solid Green Line</span>
 
-                                      {ratioLW}:1.00:{(hVal / wVal).toFixed(2)}
+                                      <span
 
-                                    </strong>{" "}
+                                        style={{
 
-                                    (L:W:H).{" "}
+                                          fontSize: "0.7rem",
 
-                                    {isDegenerate
+                                          color: "#4ade80",
 
-                                      ? "⚠️ WARNING: Room dimensions are close to square/cube proportions! This produces modal degeneracy where multiple resonant frequencies stack together, creating severe bass booms and deep nulls."
+                                        }}
 
-                                      : "✓ Favorable dimensional spread: Resonant modes are reasonably distributed across the low-frequency spectrum without severe modal stacking."}
+                                      >
 
-                                  </p>
+                                        Axial (1D)
+
+                                      </span>
+
+                                    </div>
+
+                                    <p className="line-guide-desc">
+
+                                      <strong>Axial Room Modes:</strong> Standing
+
+                                      waves between 2 opposing parallel boundaries
+
+                                      (L, W, or H). Possesses 100% modal energy;
+
+                                      primary cause of muddy bass and room
+
+                                      ringing.
+
+                                    </p>
+
+                                  </div>
+
+                                </div>
+
+
+
+                                <div className="graph-line-card">
+
+                                  <div className="line-swatch-box">
+
+                                    <div
+
+                                      style={{
+
+                                        width: "3px",
+
+                                        height: "16px",
+
+                                        borderLeft: "2px dashed #f59e0b",
+
+                                        margin: "0 auto",
+
+                                      }}
+
+                                    ></div>
+
+                                  </div>
+
+                                  <div className="line-guide-info">
+
+                                    <div className="line-guide-title">
+
+                                      <span>Dashed Amber Line</span>
+
+                                      <span
+
+                                        style={{
+
+                                          fontSize: "0.7rem",
+
+                                          color: "#f59e0b",
+
+                                        }}
+
+                                      >
+
+                                        Tangential (2D)
+
+                                      </span>
+
+                                    </div>
+
+                                    <p className="line-guide-desc">
+
+                                      <strong>Tangential Room Modes:</strong>{" "}
+
+                                      Standing waves reflecting between 4 room
+
+                                      boundaries. Carries ~50% the energy of axial
+
+                                      modes with moderate damping.
+
+                                    </p>
+
+                                  </div>
+
+                                </div>
+
+
+
+                                <div className="graph-line-card">
+
+                                  <div className="line-swatch-box">
+
+                                    <div
+
+                                      style={{
+
+                                        width: "3px",
+
+                                        height: "16px",
+
+                                        borderLeft: "2px dotted #93a891",
+
+                                        margin: "0 auto",
+
+                                      }}
+
+                                    ></div>
+
+                                  </div>
+
+                                  <div className="line-guide-info">
+
+                                    <div className="line-guide-title">
+
+                                      <span>Dotted Sage Line</span>
+
+                                      <span
+
+                                        style={{
+
+                                          fontSize: "0.7rem",
+
+                                          color: "#93a891",
+
+                                        }}
+
+                                      >
+
+                                        Oblique (3D)
+
+                                      </span>
+
+                                    </div>
+
+                                    <p className="line-guide-desc">
+
+                                      <strong>Oblique Room Modes:</strong>{" "}
+
+                                      Corner-to-corner standing waves bouncing
+
+                                      between all 6 surfaces. Carries ~25% energy
+
+                                      and decays rapidly.
+
+                                    </p>
+
+                                  </div>
 
                                 </div>
 
@@ -6411,75 +6450,87 @@ export default function GeneratorPage() {
 
                                 <div
 
-                                  className="dynamic-sub-block"
+                                  className="graph-line-card"
 
                                   style={{ gridColumn: "1 / -1" }}
 
                                 >
 
-                                  <div className="dynamic-sub-title">
+                                  <div className="line-swatch-box">
 
-                                    Listening Position & Subwoofer Placement
+                                    <div
 
-                                    Advice
+                                      style={{
+
+                                        width: "20px",
+
+                                        height: "14px",
+
+                                        background: "rgba(229, 179, 100, 0.25)",
+
+                                        border:
+
+                                          "1px solid rgba(229, 179, 100, 0.5)",
+
+                                        borderRadius: "3px",
+
+                                      }}
+
+                                    ></div>
 
                                   </div>
 
-                                  <p className="dynamic-text">
+                                  <div className="line-guide-info">
 
-                                    1.{" "}
+                                    <div className="line-guide-title">
 
-                                    <strong>
+                                      <span>
 
-                                      Avoid the 50% Room Center Null:
+                                        Shaded Amber Region (Below{" "}
 
-                                    </strong>{" "}
+                                        {roomModeData.schroeder_freq} Hz)
 
-                                    The geometric center (50% length / 50%
+                                      </span>
 
-                                    width) sits at the zero-pressure node for
+                                      <span
 
-                                    all odd axial modes ({fL} Hz, 3×{fL} Hz),
+                                        style={{
 
-                                    resulting in total bass cancellation.
+                                          fontSize: "0.7rem",
 
-                                    <br />
+                                          color: "var(--color-accent-amber)",
 
-                                    2. <strong>Apply the 38% Rule:</strong>{" "}
+                                        }}
 
-                                    Position your primary listening chair at
+                                      >
 
-                                    approximately{" "}
+                                        Schroeder Modal Zone
 
-                                    <strong>{(lVal * 0.38).toFixed(2)}m</strong>{" "}
+                                      </span>
 
-                                    from the front wall (38% of room length) to
+                                    </div>
 
-                                    achieve the flattest modal frequency
+                                    <p className="line-guide-desc">
 
-                                    response.
+                                      <strong>Modal Zone:</strong> Discrete
 
-                                    <br />
+                                      resonant standing waves dominate room
 
-                                    3.{" "}
+                                      behavior in this shaded zone. Above the
 
-                                    <strong>
+                                      Schroeder cutoff frequency (
 
-                                      Schroeder Transition ({fs} Hz):
+                                      {roomModeData.schroeder_freq} Hz), modal
 
-                                    </strong>{" "}
+                                      density increases and transitions into a
 
-                                    EQ calibration and room correction DSP
+                                      statistical, diffuse reverberation sound
 
-                                    should be focused strictly below {fs} Hz.
+                                      field.
 
-                                    Above {fs} Hz, address acoustics using broad
+                                    </p>
 
-                                    physical absorbers and diffusers rather than
-
-                                    narrow parametric EQ filters.
-
-                                  </p>
+                                  </div>
 
                                 </div>
 
@@ -6487,641 +6538,649 @@ export default function GeneratorPage() {
 
                             </div>
 
-                          );
-
-                        })()}
-
-                      </div>
-
-                    )}
-
-                  </div>
-
-                )}
+                          </div>
 
 
 
-                {/* TAB 3: WATERFALL */}
+                          {/* DYNAMIC ROOM MODES BREAKDOWN EXPLANATION */}
 
-                {activeTab === "waterfall" && waterfallData && (
+                          {(() => {
 
-                  <div>
+                            const lVal = Number(lengthM || 6);
 
-                    <WaterfallPlot3D
+                            const wVal = Number(widthM || 4);
 
-                      waterfallData={waterfallData}
+                            const hVal = Number(heightM || 2.8);
 
-                      title="3D Reverberation Octave Band Waterfall"
+                            const c = 343;
 
-                    />
+                            const fL = Number((c / (2 * lVal)).toFixed(1));
+
+                            const fW = Number((c / (2 * wVal)).toFixed(1));
+
+                            const fH = Number((c / (2 * hVal)).toFixed(1));
 
 
 
-                    <div className="plot-card">
+                            const ratioLW = (lVal / wVal).toFixed(2);
+
+                            const isDegenerate =
+
+                              Math.abs(lVal - wVal) < 0.2 ||
+
+                              Math.abs(lVal - hVal) < 0.2 ||
+
+                              Math.abs(wVal - hVal) < 0.2;
+
+                            const fs = roomModeData.schroeder_freq || 140;
 
 
 
-                      {/* Waterfall Octave Band Descriptions Guide */}
+                            return (
 
-                      <div className="graph-guide-container">
+                              <div className="dynamic-explanation-card">
 
-                        <div className="graph-guide-header">
+                                <div className="dynamic-card-title">
 
-                          <Layers size={14} />
+                                  <Grid size={16} />
 
-                          <span>
+                                  <span>
 
-                            Octave Line Guide: What Each Frequency Band
+                                    Dynamic Modal Resonance & Standing Wave
 
-                            Indicates
+                                    Analysis
 
-                          </span>
+                                  </span>
+
+                                </div>
+
+                                <div className="dynamic-explanation-grid">
+
+                                  <div className="dynamic-sub-block">
+
+                                    <div className="dynamic-sub-title">
+
+                                      Fundamental Axial Modes (f₁₀₀, f₀₁₀, f₀₀₁)
+
+                                    </div>
+
+                                    <p className="dynamic-text">
+
+                                      • <strong>Length Mode (1,0,0):</strong> {fL}{" "}
+
+                                      Hz (Strongest along front-to-back listening
+
+                                      axis)
+
+                                      <br />• <strong>
+
+                                        Width Mode (0,1,0):
+
+                                      </strong>{" "}
+
+                                      {fW} Hz (Causes side-to-side listener ear
+
+                                      imbalances)
+
+                                      <br />•{" "}
+
+                                      <strong>Height Mode (0,0,1):</strong> {fH}{" "}
+
+                                      Hz (Floor-to-ceiling vertical standing wave)
+
+                                    </p>
+
+                                  </div>
+
+
+
+                                  <div className="dynamic-sub-block">
+
+                                    <div className="dynamic-sub-title">
+
+                                      Aspect Ratio & Modal Density
+
+                                    </div>
+
+                                    <p className="dynamic-text">
+
+                                      Dimension ratio is{" "}
+
+                                      <strong>
+
+                                        {ratioLW}:1.00:{(hVal / wVal).toFixed(2)}
+
+                                      </strong>{" "}
+
+                                      (L:W:H).{" "}
+
+                                      {isDegenerate
+
+                                        ? "⚠️ WARNING: Room dimensions are close to square/cube proportions! This produces modal degeneracy where multiple resonant frequencies stack together, creating severe bass booms and deep nulls."
+
+                                        : "✓ Favorable dimensional spread: Resonant modes are reasonably distributed across the low-frequency spectrum without severe modal stacking."}
+
+                                    </p>
+
+                                  </div>
+
+
+
+                                  <div
+
+                                    className="dynamic-sub-block"
+
+                                    style={{ gridColumn: "1 / -1" }}
+
+                                  >
+
+                                    <div className="dynamic-sub-title">
+
+                                      Listening Position & Subwoofer Placement
+
+                                      Advice
+
+                                    </div>
+
+                                    <p className="dynamic-text">
+
+                                      1.{" "}
+
+                                      <strong>
+
+                                        Avoid the 50% Room Center Null:
+
+                                      </strong>{" "}
+
+                                      The geometric center (50% length / 50%
+
+                                      width) sits at the zero-pressure node for
+
+                                      all odd axial modes ({fL} Hz, 3×{fL} Hz),
+
+                                      resulting in total bass cancellation.
+
+                                      <br />
+
+                                      2. <strong>Apply the 38% Rule:</strong>{" "}
+
+                                      Position your primary listening chair at
+
+                                      approximately{" "}
+
+                                      <strong>{(lVal * 0.38).toFixed(2)}m</strong>{" "}
+
+                                      from the front wall (38% of room length) to
+
+                                      achieve the flattest modal frequency
+
+                                      response.
+
+                                      <br />
+
+                                      3.{" "}
+
+                                      <strong>
+
+                                        Schroeder Transition ({fs} Hz):
+
+                                      </strong>{" "}
+
+                                      EQ calibration and room correction DSP
+
+                                      should be focused strictly below {fs} Hz.
+
+                                      Above {fs} Hz, address acoustics using broad
+
+                                      physical absorbers and diffusers rather than
+
+                                      narrow parametric EQ filters.
+
+                                    </p>
+
+                                  </div>
+
+                                </div>
+
+                              </div>
+
+                            );
+
+                          })()}
 
                         </div>
 
-                        <div className="graph-lines-grid">
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#f59e0b",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>125 Hz Octave Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#f59e0b",
-
-                                  }}
-
-                                >
-
-                                  Sub-Bass
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Deep Bass Decay:</strong> Shows
-
-                                low-frequency standing wave decay. Slow,
-
-                                extended tails here produce boomy, muddy bass
-
-                                buildup that drowns out mixes. Treated with
-
-                                thick corner bass traps.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#34d399",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>250 Hz Octave Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#34d399",
-
-                                  }}
-
-                                >
-
-                                  Upper Bass
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Room Warmth & Punch:</strong> Governs
-
-                                lower vocal fullness and kick punch. Excess
-
-                                reverberation at 250 Hz creates a muffled, boxy
-
-                                acoustic character.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#f59e0b",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>500 Hz Octave Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#f59e0b",
-
-                                  }}
-
-                                >
-
-                                  Lower Midrange
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Speech Vowel Body:</strong> Central to
-
-                                vocal intelligibility and acoustic fullness.
-
-                                Serves as the primary reference band for Sabine
-
-                                inverse absorption calculations.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#34d399",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>1000 Hz (1 kHz) Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#34d399",
-
-                                  }}
-
-                                >
-
-                                  Core Reference
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>International Benchmark:</strong> The
-
-                                standard ISO 3382 mid-frequency reference for
-
-                                single-number RT60 specifications. Governs
-
-                                overall acoustic balance.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#f59e0b",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>2000 Hz (2 kHz) Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#f59e0b",
-
-                                  }}
-
-                                >
-
-                                  Upper Midrange
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Consonant Articulation:</strong>{" "}
-
-                                Essential for vocal presence and consonant
-
-                                clarity ('s', 't', 'k'). Clean decay here
-
-                                ensures speech is crisp and legible without
-
-                                harshness.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-
-
-                          <div className="graph-line-card">
-
-                            <div className="line-swatch-box">
-
-                              <div
-
-                                style={{
-
-                                  width: "100%",
-
-                                  height: "3px",
-
-                                  background: "#34d399",
-
-                                  borderRadius: "2px",
-
-                                }}
-
-                              ></div>
-
-                            </div>
-
-                            <div className="line-guide-info">
-
-                              <div className="line-guide-title">
-
-                                <span>4000 Hz (4 kHz) Line</span>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: "0.7rem",
-
-                                    color: "#34d399",
-
-                                  }}
-
-                                >
-
-                                  High Treble
-
-                                </span>
-
-                              </div>
-
-                              <p className="line-guide-desc">
-
-                                <strong>Air & Sheen:</strong> Governs acoustic
-
-                                brightness. Typically decays fastest in rooms
-
-                                due to molecular air absorption and high porous
-
-                                absorption coefficients.
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                      </div>
+                      )}
 
                     </div>
 
-
-
-                    {/* DYNAMIC WATERFALL COMMENTARY */}
-
-                    {(() => {
-
-                      const b125_t =
-
-                        results.bands?.["125"]?.measured_rt60_seconds ||
-
-                        Number(results.measuredT20 || 0.6) * 1.2;
-
-                      const b1k_t =
-
-                        results.bands?.["1000"]?.measured_rt60_seconds ||
-
-                        Number(results.measuredT20 || 0.5);
-
-                      const b4k_t =
-
-                        results.bands?.["4000"]?.measured_rt60_seconds ||
-
-                        Number(results.measuredT20 || 0.5) * 0.75;
-
-                      const isRinging = b125_t > b1k_t + 0.15;
-
-                      const airAbsorbed = b4k_t < b1k_t * 0.85;
+                  )}
 
 
 
-                      return (
+                  {/* TAB 3: WATERFALL */}
 
-                        <div className="dynamic-explanation-card">
+                  {activeTab === "waterfall" && waterfallData && (
 
-                          <div className="dynamic-card-title">
+                    <div>
 
-                            <Layers size={16} />
+                      <WaterfallPlot3D
+
+                        waterfallData={waterfallData}
+
+                        title="3D Reverberation Octave Band Waterfall"
+
+                      />
+
+
+
+                      <div className="plot-card">
+
+
+
+                        {/* Waterfall Octave Band Descriptions Guide */}
+
+                        <div className="graph-guide-container">
+
+                          <div className="graph-guide-header">
+
+                            <Layers size={14} />
 
                             <span>
 
-                              Dynamic 3D Waterfall & Time-Frequency Commentary
+                              Octave Line Guide: What Each Frequency Band
+
+                              Indicates
 
                             </span>
 
                           </div>
 
-                          <div className="dynamic-explanation-grid">
+                          <div className="graph-lines-grid">
 
-                            <div className="dynamic-sub-block">
+                            <div className="graph-line-card">
 
-                              <div className="dynamic-sub-title">
+                              <div className="line-swatch-box">
 
-                                Low-Frequency Modal Ringing (125 Hz vs 1 kHz)
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    background: "#f59e0b",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
 
                               </div>
 
-                              <p className="dynamic-text">
+                              <div className="line-guide-info">
 
-                                {isRinging ? (
+                                <div className="line-guide-title">
 
-                                  <>
+                                  <span>125 Hz Octave Line</span>
 
-                                    125 Hz decay tail extends{" "}
+                                  <span
 
-                                    <strong>
+                                    style={{
 
-                                      {(b125_t - b1k_t).toFixed(2)}s longer
+                                      fontSize: "0.7rem",
 
-                                    </strong>{" "}
+                                      color: "#f59e0b",
 
-                                    than the 1 kHz mid-band. This causes low-end
+                                    }}
 
-                                    overhang ('muddy acoustic masking') where
+                                  >
 
-                                    bass notes obscure subsequent musical beats
+                                    Sub-Bass
 
-                                    and speech vowels.
+                                  </span>
 
-                                  </>
+                                </div>
 
-                                ) : (
+                                <p className="line-guide-desc">
 
-                                  <>
+                                  <strong>Deep Bass Decay:</strong> Shows
 
-                                    Low frequencies decay in tight
+                                  low-frequency standing wave decay. Slow,
 
-                                    synchronization with mid frequencies (
+                                  extended tails here produce boomy, muddy bass
 
-                                    {b125_t.toFixed(2)}s vs {b1k_t.toFixed(2)}
+                                  buildup that drowns out mixes. Treated with
 
-                                    s). The bass envelope is tight and
+                                  thick corner bass traps.
 
-                                    articulate with minimal resonant overhang.
+                                </p>
 
-                                  </>
-
-                                )}
-
-                              </p>
+                              </div>
 
                             </div>
 
 
 
-                            <div className="dynamic-sub-block">
+                            <div className="graph-line-card">
 
-                              <div className="dynamic-sub-title">
+                              <div className="line-swatch-box">
 
-                                High-Frequency Air Damping (4 kHz)
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    background: "#34d399",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
 
                               </div>
 
-                              <p className="dynamic-text">
+                              <div className="line-guide-info">
 
-                                {airAbsorbed ? (
+                                <div className="line-guide-title">
 
-                                  <>
+                                  <span>250 Hz Octave Line</span>
 
-                                    4 kHz decay drops sharply to{" "}
+                                  <span
 
-                                    <strong>{b4k_t.toFixed(2)}s</strong> due to
+                                    style={{
 
-                                    classic molecular relaxation in room air
+                                      fontSize: "0.7rem",
 
-                                    combined with surface boundary absorption.
+                                      color: "#34d399",
 
-                                    This natural treble roll-off prevents
+                                    }}
 
-                                    high-frequency acoustic fatigue.
+                                  >
 
-                                  </>
+                                    Upper Bass
 
-                                ) : (
+                                  </span>
 
-                                  <>
+                                </div>
 
-                                    4 kHz energy persists with minimal
+                                <p className="line-guide-desc">
 
-                                    high-frequency damping ({b4k_t.toFixed(2)}
+                                  <strong>Room Warmth & Punch:</strong> Governs
 
-                                    s), indicating hard, non-porous boundary
+                                  lower vocal fullness and kick punch. Excess
 
-                                    surfaces (e.g., bare glass or drywall).
+                                  reverberation at 250 Hz creates a muffled, boxy
 
-                                  </>
+                                  acoustic character.
 
-                                )}
+                                </p>
 
-                              </p>
+                              </div>
 
                             </div>
 
 
 
-                            <div
+                            <div className="graph-line-card">
 
-                              className="dynamic-sub-block"
+                              <div className="line-swatch-box">
 
-                              style={{ gridColumn: "1 / -1" }}
+                                <div
 
-                            >
+                                  style={{
 
-                              <div className="dynamic-sub-title">
+                                    width: "100%",
 
-                                Time-Frequency Envelope Summary
+                                    height: "3px",
+
+                                    background: "#f59e0b",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
 
                               </div>
 
-                              <p className="dynamic-text">
+                              <div className="line-guide-info">
 
-                                The ridgeline decay shows a{" "}
+                                <div className="line-guide-title">
 
-                                {isRinging
+                                  <span>500 Hz Octave Line</span>
 
-                                  ? "warm, low-sloped"
+                                  <span
 
-                                  : "clean, uniform"}{" "}
+                                    style={{
 
-                                spectral decay contour. For professional
+                                      fontSize: "0.7rem",
 
-                                monitoring and critical listening, aim for
+                                      color: "#f59e0b",
 
-                                smooth parallel decay ridges across all 6 octave
+                                    }}
 
-                                bands with no isolated resonant ridges exceeding
+                                  >
 
-                                0.15s above adjacent bands.
+                                    Lower Midrange
 
-                              </p>
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>Speech Vowel Body:</strong> Central to
+
+                                  vocal intelligibility and acoustic fullness.
+
+                                  Serves as the primary reference band for Sabine
+
+                                  inverse absorption calculations.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    background: "#34d399",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>1000 Hz (1 kHz) Line</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "#34d399",
+
+                                    }}
+
+                                  >
+
+                                    Core Reference
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>International Benchmark:</strong> The
+
+                                  standard ISO 3382 mid-frequency reference for
+
+                                  single-number RT60 specifications. Governs
+
+                                  overall acoustic balance.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    background: "#f59e0b",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>2000 Hz (2 kHz) Line</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "#f59e0b",
+
+                                    }}
+
+                                  >
+
+                                    Upper Midrange
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>Consonant Articulation:</strong>{" "}
+
+                                  Essential for vocal presence and consonant
+
+                                  clarity ('s', 't', 'k'). Clean decay here
+
+                                  ensures speech is crisp and legible without
+
+                                  harshness.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+
+
+                            <div className="graph-line-card">
+
+                              <div className="line-swatch-box">
+
+                                <div
+
+                                  style={{
+
+                                    width: "100%",
+
+                                    height: "3px",
+
+                                    background: "#34d399",
+
+                                    borderRadius: "2px",
+
+                                  }}
+
+                                ></div>
+
+                              </div>
+
+                              <div className="line-guide-info">
+
+                                <div className="line-guide-title">
+
+                                  <span>4000 Hz (4 kHz) Line</span>
+
+                                  <span
+
+                                    style={{
+
+                                      fontSize: "0.7rem",
+
+                                      color: "#34d399",
+
+                                    }}
+
+                                  >
+
+                                    High Treble
+
+                                  </span>
+
+                                </div>
+
+                                <p className="line-guide-desc">
+
+                                  <strong>Air & Sheen:</strong> Governs acoustic
+
+                                  brightness. Typically decays fastest in rooms
+
+                                  due to molecular air absorption and high porous
+
+                                  absorption coefficients.
+
+                                </p>
+
+                              </div>
 
                             </div>
 
@@ -7129,269 +7188,481 @@ export default function GeneratorPage() {
 
                         </div>
 
-                      );
-
-                    })()}
-
-                  </div>
-
-                )}
+                      </div>
 
 
 
-                {/* TAB 4: CLARITY */}
+                      {/* DYNAMIC WATERFALL COMMENTARY */}
 
-                {activeTab === "clarity" && (
+                      {(() => {
 
-                  <div>
+                        const b125_t =
 
-                    <div className="results-title">
+                          results.bands?.["125"]?.measured_rt60_seconds ||
 
-                      <Sparkles size={20} color="var(--color-light-sage)" />
+                          Number(results.measuredT20 || 0.6) * 1.2;
 
-                      <span>Speech & Music Acoustic Clarity (ISO Metrics)</span>
+                        const b1k_t =
+
+                          results.bands?.["1000"]?.measured_rt60_seconds ||
+
+                          Number(results.measuredT20 || 0.5);
+
+                        const b4k_t =
+
+                          results.bands?.["4000"]?.measured_rt60_seconds ||
+
+                          Number(results.measuredT20 || 0.5) * 0.75;
+
+                        const isRinging = b125_t > b1k_t + 0.15;
+
+                        const airAbsorbed = b4k_t < b1k_t * 0.85;
+
+
+
+                        return (
+
+                          <div className="dynamic-explanation-card">
+
+                            <div className="dynamic-card-title">
+
+                              <Layers size={16} />
+
+                              <span>
+
+                                Dynamic 3D Waterfall & Time-Frequency Commentary
+
+                              </span>
+
+                            </div>
+
+                            <div className="dynamic-explanation-grid">
+
+                              <div className="dynamic-sub-block">
+
+                                <div className="dynamic-sub-title">
+
+                                  Low-Frequency Modal Ringing (125 Hz vs 1 kHz)
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  {isRinging ? (
+
+                                    <>
+
+                                      125 Hz decay tail extends{" "}
+
+                                      <strong>
+
+                                        {(b125_t - b1k_t).toFixed(2)}s longer
+
+                                      </strong>{" "}
+
+                                      than the 1 kHz mid-band. This causes low-end
+
+                                      overhang ('muddy acoustic masking') where
+
+                                      bass notes obscure subsequent musical beats
+
+                                      and speech vowels.
+
+                                    </>
+
+                                  ) : (
+
+                                    <>
+
+                                      Low frequencies decay in tight
+
+                                      synchronization with mid frequencies (
+
+                                      {b125_t.toFixed(2)}s vs {b1k_t.toFixed(2)}
+
+                                      s). The bass envelope is tight and
+
+                                      articulate with minimal resonant overhang.
+
+                                    </>
+
+                                  )}
+
+                                </p>
+
+                              </div>
+
+
+
+                              <div className="dynamic-sub-block">
+
+                                <div className="dynamic-sub-title">
+
+                                  High-Frequency Air Damping (4 kHz)
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  {airAbsorbed ? (
+
+                                    <>
+
+                                      4 kHz decay drops sharply to{" "}
+
+                                      <strong>{b4k_t.toFixed(2)}s</strong> due to
+
+                                      classic molecular relaxation in room air
+
+                                      combined with surface boundary absorption.
+
+                                      This natural treble roll-off prevents
+
+                                      high-frequency acoustic fatigue.
+
+                                    </>
+
+                                  ) : (
+
+                                    <>
+
+                                      4 kHz energy persists with minimal
+
+                                      high-frequency damping ({b4k_t.toFixed(2)}
+
+                                      s), indicating hard, non-porous boundary
+
+                                      surfaces (e.g., bare glass or drywall).
+
+                                    </>
+
+                                  )}
+
+                                </p>
+
+                              </div>
+
+
+
+                              <div
+
+                                className="dynamic-sub-block"
+
+                                style={{ gridColumn: "1 / -1" }}
+
+                              >
+
+                                <div className="dynamic-sub-title">
+
+                                  Time-Frequency Envelope Summary
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  The ridgeline decay shows a{" "}
+
+                                  {isRinging
+
+                                    ? "warm, low-sloped"
+
+                                    : "clean, uniform"}{" "}
+
+                                  spectral decay contour. For professional
+
+                                  monitoring and critical listening, aim for
+
+                                  smooth parallel decay ridges across all 6 octave
+
+                                  bands with no isolated resonant ridges exceeding
+
+                                  0.15s above adjacent bands.
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        );
+
+                      })()}
 
                     </div>
 
+                  )}
 
 
-                    <div className="metrics-row">
 
-                      <div className="metric-card">
+                  {/* TAB 4: CLARITY */}
 
-                        <div className="metric-value">{results.c50} dB</div>
+                  {activeTab === "clarity" && (
 
-                        <div className="metric-name">C50 Speech Clarity</div>
+                    <div>
 
-                      </div>
+                      <div className="results-title">
 
-                      <div className="metric-card">
+                        <Sparkles size={20} color="var(--color-light-sage)" />
 
-                        <div className="metric-value">{results.c80} dB</div>
-
-                        <div className="metric-name">C80 Music Clarity</div>
+                        <span>Speech & Music Acoustic Clarity (ISO Metrics)</span>
 
                       </div>
 
-                      <div className="metric-card">
 
-                        <div
 
-                          className="metric-value"
+                      <div className="metrics-row">
 
-                          style={{ color: "var(--color-light-sage)" }}
+                        <div className="metric-card">
 
-                        >
+                          <div className="metric-value">{results.c50} dB</div>
 
-                          {results.d50}%
+                          <div className="metric-name">C50 Speech Clarity</div>
 
                         </div>
 
-                        <div className="metric-name">D50 Definition</div>
+                        <div className="metric-card">
+
+                          <div className="metric-value">{results.c80} dB</div>
+
+                          <div className="metric-name">C80 Music Clarity</div>
+
+                        </div>
+
+                        <div className="metric-card">
+
+                          <div
+
+                            className="metric-value"
+
+                            style={{ color: "var(--color-light-sage)" }}
+
+                          >
+
+                            {results.d50}%
+
+                          </div>
+
+                          <div className="metric-name">D50 Definition</div>
+
+                        </div>
 
                       </div>
+
+
+
+                      {/* DYNAMIC CLARITY INDICES CHARACTERISTICS */}
+
+                      {(() => {
+
+                        const c50 = Number(results.c50 || 5.2);
+
+                        const c80 = Number(results.c80 || 8.7);
+
+                        const d50 = Number(results.d50 || 78.2);
+
+
+
+                        let c50Grade = "Class A (Outstanding)";
+
+                        let c50Desc =
+
+                          "Early direct sound strongly dominates over late reverberation. Ideal for broadcast, classrooms, conferencing, and vocal studios.";
+
+                        let c50Color = "var(--color-accent-emerald)";
+
+                        if (c50 < -2) {
+
+                          c50Grade = "Class D (Poor)";
+
+                          c50Desc =
+
+                            "Late reverberation severely masks consonant definition. Speech intelligibility is compromised; thick acoustic treatment is essential.";
+
+                          c50Color = "#f87171";
+
+                        } else if (c50 < 1) {
+
+                          c50Grade = "Class C (Fair)";
+
+                          c50Desc =
+
+                            "Marginal intelligibility. Listeners in the rear of the room will experience difficulty with fast speech and consonant clarity.";
+
+                          c50Color = "var(--color-accent-amber)";
+
+                        } else if (c50 < 3) {
+
+                          c50Grade = "Class B (Good)";
+
+                          c50Desc =
+
+                            "Good speech intelligibility suitable for multipurpose rooms, meetings, and lecture halls.";
+
+                          c50Color = "var(--color-light-sage)";
+
+                        }
+
+
+
+                        let c80Char = "Balanced Studio Articulation";
+
+                        let c80Desc =
+
+                          "Provides the optimal balance between transient punch and spatial acoustic bloom for modern music production.";
+
+                        if (c80 > 4) {
+
+                          c80Char = "Highly Analytical & Dry";
+
+                          c80Desc =
+
+                            "High clarity with very low room coloration. Excellent for transient analysis, rhythm-heavy production, and podcast mixing.";
+
+                        } else if (c80 < -1) {
+
+                          c80Char = "Warm & Symphonic / Cathedral";
+
+                          c80Desc =
+
+                            "High reverberant energy blend. Excellent for classical orchestra, organ, and choral performances, but lacks definition for fast contemporary music.";
+
+                        }
+
+
+
+                        return (
+
+                          <div
+
+                            className="dynamic-explanation-card"
+
+                            style={{ marginTop: "16px" }}
+
+                          >
+
+                            <div className="dynamic-card-title">
+
+                              <Sparkles size={16} />
+
+                              <span>
+
+                                Dynamic Clarity Indices & Intelligibility
+
+                                Characteristics
+
+                              </span>
+
+                            </div>
+
+                            <div className="dynamic-explanation-grid">
+
+                              <div className="dynamic-sub-block">
+
+                                <div className="dynamic-sub-title">
+
+                                  C50 Speech Rating:{" "}
+
+                                  <span style={{ color: c50Color }}>
+
+                                    {c50Grade}
+
+                                  </span>
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  <strong>C₅₀ = {c50} dB:</strong> {c50Desc}
+
+                                </p>
+
+                              </div>
+
+
+
+                              <div className="dynamic-sub-block">
+
+                                <div className="dynamic-sub-title">
+
+                                  C80 Musical Character: <span>{c80Char}</span>
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  <strong>C₈₀ = {c80} dB:</strong> {c80Desc}
+
+                                </p>
+
+                              </div>
+
+
+
+                              <div
+
+                                className="dynamic-sub-block"
+
+                                style={{ gridColumn: "1 / -1" }}
+
+                              >
+
+                                <div className="dynamic-sub-title">
+
+                                  D50 Definition Index ({d50}%) & Acoustic
+
+                                  Recommendation
+
+                                </div>
+
+                                <p className="dynamic-text">
+
+                                  <strong>{d50}%</strong> of total sound energy
+
+                                  reaches listener ears within the critical first
+
+                                  50 ms window.{" "}
+
+                                  {d50 >= 60
+
+                                    ? "This exceeds the recommended 50% threshold for crystal-clear syllable perception."
+
+                                    : "This falls below the 50% threshold, meaning diffuse late reflections overpower direct syllable articulation. Adding lateral absorption panels will boost D50 significantly."}
+
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        );
+
+                      })()}
 
                     </div>
 
+                  )}
 
-
-                    {/* DYNAMIC CLARITY INDICES CHARACTERISTICS */}
-
-                    {(() => {
-
-                      const c50 = Number(results.c50 || 5.2);
-
-                      const c80 = Number(results.c80 || 8.7);
-
-                      const d50 = Number(results.d50 || 78.2);
-
-
-
-                      let c50Grade = "Class A (Outstanding)";
-
-                      let c50Desc =
-
-                        "Early direct sound strongly dominates over late reverberation. Ideal for broadcast, classrooms, conferencing, and vocal studios.";
-
-                      let c50Color = "var(--color-accent-emerald)";
-
-                      if (c50 < -2) {
-
-                        c50Grade = "Class D (Poor)";
-
-                        c50Desc =
-
-                          "Late reverberation severely masks consonant definition. Speech intelligibility is compromised; thick acoustic treatment is essential.";
-
-                        c50Color = "#f87171";
-
-                      } else if (c50 < 1) {
-
-                        c50Grade = "Class C (Fair)";
-
-                        c50Desc =
-
-                          "Marginal intelligibility. Listeners in the rear of the room will experience difficulty with fast speech and consonant clarity.";
-
-                        c50Color = "var(--color-accent-amber)";
-
-                      } else if (c50 < 3) {
-
-                        c50Grade = "Class B (Good)";
-
-                        c50Desc =
-
-                          "Good speech intelligibility suitable for multipurpose rooms, meetings, and lecture halls.";
-
-                        c50Color = "var(--color-light-sage)";
-
-                      }
-
-
-
-                      let c80Char = "Balanced Studio Articulation";
-
-                      let c80Desc =
-
-                        "Provides the optimal balance between transient punch and spatial acoustic bloom for modern music production.";
-
-                      if (c80 > 4) {
-
-                        c80Char = "Highly Analytical & Dry";
-
-                        c80Desc =
-
-                          "High clarity with very low room coloration. Excellent for transient analysis, rhythm-heavy production, and podcast mixing.";
-
-                      } else if (c80 < -1) {
-
-                        c80Char = "Warm & Symphonic / Cathedral";
-
-                        c80Desc =
-
-                          "High reverberant energy blend. Excellent for classical orchestra, organ, and choral performances, but lacks definition for fast contemporary music.";
-
-                      }
-
-
-
-                      return (
-
-                        <div
-
-                          className="dynamic-explanation-card"
-
-                          style={{ marginTop: "16px" }}
-
-                        >
-
-                          <div className="dynamic-card-title">
-
-                            <Sparkles size={16} />
-
-                            <span>
-
-                              Dynamic Clarity Indices & Intelligibility
-
-                              Characteristics
-
-                            </span>
-
-                          </div>
-
-                          <div className="dynamic-explanation-grid">
-
-                            <div className="dynamic-sub-block">
-
-                              <div className="dynamic-sub-title">
-
-                                C50 Speech Rating:{" "}
-
-                                <span style={{ color: c50Color }}>
-
-                                  {c50Grade}
-
-                                </span>
-
-                              </div>
-
-                              <p className="dynamic-text">
-
-                                <strong>C₅₀ = {c50} dB:</strong> {c50Desc}
-
-                              </p>
-
-                            </div>
-
-
-
-                            <div className="dynamic-sub-block">
-
-                              <div className="dynamic-sub-title">
-
-                                C80 Musical Character: <span>{c80Char}</span>
-
-                              </div>
-
-                              <p className="dynamic-text">
-
-                                <strong>C₈₀ = {c80} dB:</strong> {c80Desc}
-
-                              </p>
-
-                            </div>
-
-
-
-                            <div
-
-                              className="dynamic-sub-block"
-
-                              style={{ gridColumn: "1 / -1" }}
-
-                            >
-
-                              <div className="dynamic-sub-title">
-
-                                D50 Definition Index ({d50}%) & Acoustic
-
-                                Recommendation
-
-                              </div>
-
-                              <p className="dynamic-text">
-
-                                <strong>{d50}%</strong> of total sound energy
-
-                                reaches listener ears within the critical first
-
-                                50 ms window.{" "}
-
-                                {d50 >= 60
-
-                                  ? "This exceeds the recommended 50% threshold for crystal-clear syllable perception."
-
-                                  : "This falls below the 50% threshold, meaning diffuse late reflections overpower direct syllable articulation. Adding lateral absorption panels will boost D50 significantly."}
-
-                              </p>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                      );
-
-                    })()}
-
-                  </div>
-
-                )}
-
-              </div>
+                </div>
+              </>
 
             )}
+
+            {/* Dedicated Printable ISO 3382 Laboratory Acoustic Report (active in @media print) */}
+            <AcousticPrintReport
+              roomType={roomType}
+              roomConfig={ROOM_TYPES_CONFIG[roomType] || ALL_SPACES_CONFIG[roomType] || {}}
+              lengthM={lengthM}
+              widthM={widthM}
+              heightM={heightM}
+              volumeM3={volumeM3}
+              material={material}
+              results={results}
+              roomModeData={roomModeData}
+            />
 
           </div>
 
@@ -7410,6 +7681,25 @@ export default function GeneratorPage() {
         onClose={() => setIsRoomModesModalOpen(false)}
 
       />
+
+      {/* Saved Reports Drawer / Modal */}
+      <SavedReportsModal
+        isOpen={isSavedModalOpen}
+        onClose={() => setIsSavedModalOpen(false)}
+        savedReports={savedReports}
+        onLoadReport={handleLoadReport}
+        onDeleteReport={handleDeleteReport}
+        onClearAll={handleClearAllReports}
+        onExportJSON={handleExportJSON}
+      />
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="resona-toast no-print">
+          <CheckCircle2 size={18} color="var(--color-accent-emerald)" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
     </div>
 

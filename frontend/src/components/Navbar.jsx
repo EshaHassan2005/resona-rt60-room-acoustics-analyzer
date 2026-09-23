@@ -8,7 +8,7 @@ export default function Navbar({ onOpenAnalyzer, onOpenRT60Info, onOpenContact }
     <nav className="navbar">
       <div className="container navbar-inner">
         {/* Brand Logo & Slogan */}
-        <div className="nav-brand"  style={{color:'#27362A'}} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} >
+        <div className="nav-brand" style={{ color: '#27362A' }} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} >
           <div className="brand-logo-icon">
             <span></span>
             <span></span>
@@ -17,8 +17,8 @@ export default function Navbar({ onOpenAnalyzer, onOpenRT60Info, onOpenContact }
             <span></span>
             <span></span>
           </div>
-          <span className='brandname' style={{opacity:'8',color:'#e7e2e2',fontWeight:'500'}}>RESONA</span>
-          <span className="nav-slogan" style={{ marginLeft: '45px',paddingLeft:'310px',opacity:'.7' }}>
+          <span className='brandname' style={{ opacity: '8', color: '#e7e2e2', fontWeight: '500' }}>RESONA</span>
+          <span className="nav-slogan" style={{ marginLeft: '45px', paddingLeft: '310px', opacity: '.7' }}>
             Find and create your own space with us
           </span>
         </div>
