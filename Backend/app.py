@@ -22,8 +22,14 @@ from dsp import (
     definition_index,
     calculate_room_modes,
     calculate_waterfall,
+    bass_treble_ratio,
 )
-from treatment import load_acoustic_targets, recommend_treatment
+from treatment import (
+    load_acoustic_targets,
+    recommend_treatment,
+    room_surface_area,
+    compare_absorption_models,
+)
 from scipy import stats
 
 import numpy as np
@@ -248,6 +254,33 @@ def treatment_route():
     if not measured_rt60_by_band:
         return jsonify({"error": "Could not estimate RT60 for any octave band from this recording."}), 422
 
+    # Bass/Treble Ratio - computed from real measured octave-band RT60s
+    # (previously only estimated client-side with hardcoded multipliers).
+    try:
+        tonal_balance = bass_treble_ratio(measured_rt60_by_band)
+    except ValueError:
+        tonal_balance = {"bass_ratio": None, "treble_ratio": None}
+
+    # Eyring vs. Sabine comparison - needs a surface area, which needs
+    # dimensions (falls back to a cube-shape estimate if only a bare
+    # volume was submitted; see room_surface_area()'s docstring).
+    try:
+        surface_info = room_surface_area(
+            length_m=float(length_raw) if length_raw else None,
+            width_m=float(width_raw) if width_raw else None,
+            height_m=float(height_raw) if height_raw else None,
+            volume_m3=volume_m3,
+        )
+        absorption_model_comparison = compare_absorption_models(
+            measured_rt60_by_band.get("500", list(measured_rt60_by_band.values())[0]),
+            volume_m3,
+            surface_info["surface_area_m2"],
+        )
+        absorption_model_comparison["surface_area_m2"] = round(surface_info["surface_area_m2"], 2)
+        absorption_model_comparison["surface_area_estimated"] = surface_info["estimated"]
+    except ValueError:
+        absorption_model_comparison = None
+
     # Broadband calculations for complete modal metrics & decay chart
     broadband_decay = energy_decay(signal, sample_rate)
     time_full = np.arange(len(broadband_decay)) / sample_rate
@@ -286,6 +319,9 @@ def treatment_route():
         "points": points,
         "total_area_needed_m2": total_area_needed,
         "lundeby_corrected": True,
+        "bass_ratio": tonal_balance["bass_ratio"],
+        "treble_ratio": tonal_balance["treble_ratio"],
+        "absorption_model_comparison": absorption_model_comparison,
         **result
     }), 200
 
