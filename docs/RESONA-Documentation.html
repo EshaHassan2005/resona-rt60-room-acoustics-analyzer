@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RESONA — Technical Documentation</title>
+<style>
+  :root {
+    --bg: #faf8f5;
+    --surface: #ffffff;
+    --ink: #1e1b18;
+    --ink-soft: #55504a;
+    --border: #e6e0d8;
+    --accent: #7a5cff;
+    --accent-soft: #efe9ff;
+    --code-bg: #f3f0ea;
+    --warn-bg: #fff4e5;
+    --warn-border: #e8b96b;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16141a; --surface: #1e1b23; --ink: #ece8f0; --ink-soft: #b6afc0;
+      --border: #322d3b; --accent: #a48bff; --accent-soft: #2a2440;
+      --code-bg: #221f2b; --warn-bg: #332a17; --warn-border: #a67e3a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16141a; --surface: #1e1b23; --ink: #ece8f0; --ink-soft: #b6afc0;
+    --border: #322d3b; --accent: #a48bff; --accent-soft: #2a2440;
+    --code-bg: #221f2b; --warn-bg: #332a17; --warn-border: #a67e3a;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); scroll-behavior: smooth; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Georgia', 'Iowan Old Style', ui-serif, serif;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero {
+    padding: 2.5rem 1.5rem 2rem; border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--accent-soft), transparent);
+  }
+  header.hero .wrap { padding-top: 0; padding-bottom: 0; }
+  h1 { font-size: 2rem; margin: 0 0 0.35rem; font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; }
+  .subtitle { color: var(--ink-soft); font-size: 1.05rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .badges { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .badge {
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.78rem;
+    padding: 0.25rem 0.65rem; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft);
+  }
+  h2 {
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 1.4rem;
+    margin: 2.75rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent);
+    color: var(--ink);
+  }
+  h3 { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 1.1rem; margin: 1.9rem 0 0.6rem; color: var(--accent); }
+  h4 { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.98rem; margin: 1.3rem 0 0.4rem; color: var(--ink); }
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.5rem 0; padding-left: 1.4rem; }
+  li { margin: 0.35rem 0; }
+  strong { color: var(--ink); }
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.92rem;
+  }
+  .toc h2 { margin-top: 0; border: none; padding-bottom: 0; font-size: 1.1rem; }
+  .toc ol { padding-left: 1.2rem; columns: 2; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+  code, pre {
+    font-family: 'SF Mono', 'Menlo', ui-monospace, monospace;
+    background: var(--code-bg); border-radius: 6px;
+  }
+  code { padding: 0.1rem 0.4rem; font-size: 0.88em; }
+  pre { padding: 0.9rem 1rem; overflow-x: auto; border: 1px solid var(--border); font-size: 0.85rem; line-height: 1.55; }
+  pre code { padding: 0; background: none; }
+  .formula {
+    background: var(--code-bg); border-left: 3px solid var(--accent);
+    padding: 0.85rem 1.1rem; margin: 0.85rem 0; border-radius: 0 8px 8px 0;
+    font-family: 'SF Mono', ui-monospace, monospace; font-size: 0.95rem;
+    overflow-x: auto; white-space: pre-wrap;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 0.55rem 0.75rem; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .overflow-x { overflow-x: auto; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.2rem 1.4rem; margin: 1rem 0;
+  }
+  .flag {
+    background: var(--warn-bg); border: 1px solid var(--warn-border);
+    border-radius: 10px; padding: 0.9rem 1.2rem; margin: 1rem 0;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.93rem;
+  }
+  .pitch {
+    background: var(--accent-soft); border: 1px solid var(--accent);
+    border-radius: 12px; padding: 1.1rem 1.4rem; margin: 1rem 0;
+    font-size: 1.05rem;
+  }
+  .pipeline {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.2rem; font-family: 'SF Mono', ui-monospace, monospace;
+    font-size: 0.82rem; line-height: 1.6; overflow-x: auto; white-space: pre;
+  }
+  .func-name { font-family: 'SF Mono', ui-monospace, monospace; font-weight: 700; color: var(--accent); font-size: 1rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { text-align: center; color: var(--ink-soft); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.85rem; padding: 2rem 0; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>RESONA</h1>
+    <div class="subtitle">Room Acoustics &amp; RT60 Analyzer — technical documentation</div>
+    <div class="badges">
+      <span class="badge">React 19 + Vite</span>
+      <span class="badge">Python / Flask</span>
+      <span class="badge">DSP: NumPy · SciPy · Librosa</span>
+      <span class="badge">ISO 3382-1</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="toc">
+<h2>Contents</h2>
+<ol>
+  <li><a href="#overview">1 — Overview</a></li>
+  <li><a href="#bigpicture">2 — Architecture</a></li>
+  <li><a href="#pipeline">3 — Core Pipeline</a></li>
+  <li><a href="#backend">4 — Backend</a></li>
+  <li><a href="#frontend">5 — Frontend</a></li>
+  <li><a href="#glossary">6 — Glossary</a></li>
+  <li><a href="#formulas">7 — Formula Reference</a></li>
+</ol>
+</div>
+
+<h2 id="overview">1 — Overview</h2>
+<div class="pitch">
+RESONA turns a single recorded hand clap — or just a room's dimensions — into a full acoustic diagnostic report. It measures how long sound lingers in a room (RT60), which frequencies are misbehaving, where standing waves (room modes) will cause boomy bass, and it recommends how much acoustic panel material is needed to fix it — using the same ISO 3382-1 signal-processing standard that professional acoustic analyzers use, running in a browser.
+</div>
+
+<h3>1.1 Problem</h3>
+<p>Every room "colors" the sound inside it. Sound bounces off walls, ceilings, and furniture, arriving at the ear many times at many delays — this pileup is <strong>reverberation</strong>. Two identical speakers in two different rooms can sound completely different purely because of room geometry and surface materials.</p>
+<p>This has real consequences beyond audiophile concerns:</p>
+<ul>
+  <li><strong>Classrooms</strong>: excess reverberation directly hurts speech intelligibility and, by extension, learning (codified into law via <strong>ANSI/ASA S12.60</strong>, the US school acoustics design standard).</li>
+  <li><strong>Recording studios</strong>: unwanted "room color" and flutter echo degrade recordings.</li>
+  <li><strong>Concert halls</strong>: the "right" amount of reverb differs for speech vs. orchestral music vs. opera.</li>
+  <li><strong>Offices</strong>: poor acoustics reduce speech privacy and cause listening fatigue.</li>
+</ul>
+<p>Measuring and fixing this has historically required either expensive calibrated hardware or guesswork. RESONA provides a free, accessible way to <strong>measure</strong> a room and get a <strong>quantitative, materials-based treatment plan</strong>.</p>
+
+<h3>1.2 Solution</h3>
+<p>RESONA takes a recorded impulsive sound (a clap, balloon pop) — or, alternatively, just the room's dimensions — and runs it through the same digital signal processing (DSP) pipeline that professional acoustic measurement software uses, reimplemented in Python and served through a web app that needs no special hardware beyond a laptop microphone.</p>
+
+<h2 id="bigpicture">2 — Architecture</h2>
+
+<div class="pipeline">┌─────────────────────────────┐   HTTP (multipart/form-data)   ┌──────────────────────────────┐
+│         FRONTEND            │ ───────────────────────────────▶│           BACKEND             │
+│   React 19 + Vite            │                                 │   Python 3.11 + Flask 3.1      │
+│   Deployed on Vercel         │ ◀───────────────────────────────│   Deployed on Render + Gunicorn│
+│                              │          JSON response          │                                │
+└─────────────────────────────┘                                 └──────────────────────────────┘</div>
+<ul>
+  <li><strong>Frontend</strong>: collects audio (file upload OR live mic recording via the browser's <code>MediaRecorder</code> API) and/or room dimensions, and renders results as charts, tables, a 3D waterfall plot, and a printable report.</li>
+  <li><strong>Backend</strong>: completely <strong>stateless</strong>. Every request re-decodes the uploaded audio from scratch and runs the DSP pipeline fresh. Nothing is saved server-side — no database. "Saved reports" in the UI live entirely in the browser's <code>localStorage</code>.</li>
+</ul>
+<p><strong>Why stateless?</strong> Each analysis is a self-contained computation on one file, with no need to persist anything between requests. This keeps deployment simple (just a Flask process) and avoids privacy/storage concerns around user audio.</p>
+
+<h3>2.1 Backend Modules</h3>
+<table>
+<tr><th>File</th><th>Responsibility</th></tr>
+<tr><td><code>audio_utils.py</code></td><td>Decoding uploaded audio (via Librosa, with an ffmpeg fallback for WebM/Opus browser mic recordings), file-size limits, waveform downsampling for the UI preview</td></tr>
+<tr><td><code>dsp.py</code></td><td>All the acoustic math: onset detection, Schroeder/Lundeby energy decay, RT60 regression, octave-band filtering, FFT, room modes, waterfall, clarity metrics</td></tr>
+<tr><td><code>treatment.py</code></td><td>Sabine-equation absorption calculations and material/area recommendations, driven by <code>acoustic_targets.json</code></td></tr>
+<tr><td><code>app.py</code></td><td>Flask routes — wires HTTP requests to the DSP/treatment functions and shapes the JSON responses</td></tr>
+</table>
+
+<h3>2.2 API Endpoints</h3>
+<div class="overflow-x">
+<table>
+<tr><th>Endpoint</th><th>Returns</th></tr>
+<tr><td><code>POST /upload</code></td><td>Raw waveform (full-resolution + downsampled preview) for on-screen display</td></tr>
+<tr><td><code>POST /energydecay</code></td><td>The Schroeder energy decay curve (dB vs. time)</td></tr>
+<tr><td><code>POST /octavebands</code></td><td>Energy decay curve, separately, for each of the 6 octave bands</td></tr>
+<tr><td><code>POST /fft</code></td><td>Raw frequency-magnitude spectrum</td></tr>
+<tr><td><code>POST /RT60</code></td><td>T20 and T30 RT60 estimates + R² fit-quality scores</td></tr>
+<tr><td><code>POST /clarity</code></td><td>C50, C80, D50</td></tr>
+<tr><td><code>POST /roommodes</code></td><td>List of axial/tangential/oblique modes, Schroeder cutoff frequency, FFT peaks matched to modes</td></tr>
+<tr><td><code>POST /waterfall</code></td><td>Time × frequency decay grid feeding the 3D plot</td></tr>
+<tr><td><code>POST /treatment</code></td><td>The full bundle: RT60, clarity, bass/treble ratio, Sabine-based material/area recommendation</td></tr>
+</table>
+</div>
+
+<h2 id="pipeline">3 — Core Pipeline</h2>
+<p>Nearly every feature in RESONA depends on the same five steps, run in order:</p>
+<div class="pipeline">1. RECORD/UPLOAD a clap
+        │
+2. ONSET DETECTION  →  find_onset()          "Where does the clap actually start?"
+        │
+3. TRIM  →  extract_impulse_response()        "Cut away everything before the clap"
+        │
+4. ENERGY DECAY CURVE  →  energy_decay() → lundeby_correction()
+        │                    "Turn the messy waveform into a clean dB-vs-time decay curve"
+        │
+5. RT60 ESTIMATION  →  estimate_rt60()        "Fit a line to the decay curve, extrapolate to -60 dB"
+        │
+        ▼
+Everything else (octave bands, room modes, waterfall, clarity, treatment)
+is this same chain, either applied broadband or repeated per frequency band.</div>
+
+<h2 id="backend">4 — Backend</h2>
+
+<h3>4.1 <code>audio_utils.py</code> — getting audio into a usable form</h3>
+
+<p><span class="func-name">load_audio(file_storage, target_sr=None)</span></p>
+<p>The entry point every route calls first:</p>
+<ol>
+  <li>Checks file size (rejects anything over <code>MAX_FILE_SIZE_MB = 50</code>).</li>
+  <li>Reads the raw bytes.</li>
+  <li>Tries to decode with <strong>Librosa</strong> (<code>librosa.load</code>), which handles WAV/MP3/FLAC/OGG directly.</li>
+  <li>If that fails, falls back to <code>_convert_with_ffmpeg()</code> — needed for <strong>live mic recordings</strong>: browsers record audio as <code>audio/webm;codecs=opus</code> (Chrome/Firefox default), and Librosa's normal decoder can't always read that container reliably in every environment. ffmpeg converts it to a clean 44.1kHz mono WAV file first.</li>
+  <li>Converts everything to a <code>float64</code> NumPy array + integer sample rate, and raises a clean <code>AudioLoadError</code> for anything that still fails (empty audio, corrupt file, etc.) so the Flask routes can return a proper 400 error instead of crashing.</li>
+</ol>
+
+<p><span class="func-name">_convert_with_ffmpeg(raw_bytes)</span></p>
+<p>Writes the raw bytes to a temp file, shells out to <code>ffmpeg</code> (located via the <code>imageio_ffmpeg</code> package so no system-level ffmpeg install is required), converts to WAV, and returns the path. Cleans up temp files in a <code>finally</code> block either way.</p>
+
+<p><span class="func-name">downsample_for_preview(signal, sample_rate, target_points=2000)</span></p>
+<p>The raw waveform of even a 2-second clap at 44.1kHz is ~88,000 samples — too many points to usefully draw as an SVG line in the browser. This function buckets the signal into <code>target_points</code> buckets and, in each bucket, keeps the peak sample (not the average), since averaging would smear out transient spikes and make the waveform preview look flatter/quieter than it really is. This is a UI convenience function only — it does not feed into any acoustic calculation, only the waveform picture shown to the user.</p>
+
+<h3>4.2 <code>dsp.py</code> — the acoustic math engine</h3>
+
+<h4>Onset detection</h4>
+<p><span class="func-name">find_onset(signal, sample_rate, threshold_db=20.0, frame_ms=5.0, sustain_ms=50.0, sustain_margin_db=6.0)</span></p>
+<p>Answers: where in this recording does the clap begin? This has to be precise because every downstream calculation (decay curve, RT60, clarity windows) is timed relative to this point.</p>
+<ol>
+  <li>Chops the signal into 5 ms frames.</li>
+  <li>For each frame, computes both peak amplitude (dB) and RMS amplitude (dB).</li>
+  <li>Estimates the noise floor as the median RMS level across all frames — median is used (not mean) because it's robust to the one loud clap frame skewing the estimate.</li>
+  <li>Candidate onset frames = frames whose peak exceeds <code>noise_floor + threshold_db</code> (default: 20 dB above the floor).</li>
+  <li><strong>Sustain check</strong>: a candidate frame is only accepted as the real clap if the following ~50 ms also stays elevated above the noise floor. This rejects short transient spikes — a cough, a chair scrape, a door slam — that are loud but have no decaying reverb tail after them. Only a genuine clap-like event (loud + followed by decay) passes.</li>
+  <li>Within the accepted frame, the exact sample-level onset is refined by walking backward from the local peak until the signal drops below a rise threshold.</li>
+</ol>
+
+<p><span class="func-name">_global_peak_onset(signal, threshold_db=20.0)</span></p>
+<p>A "naive" fallback strategy: finds the loudest sample and treats that as the clap. Kept only for very short signals where there aren't enough frames (<code>n_frames &lt; 6</code>) for the frame-based statistics above to be meaningful. This is the version that would be fooled by a loud noise burst with no decay tail — which is why the sustain-checked <code>find_onset()</code> exists as the default (covered by the regression test <code>test_find_onset_ignores_louder_stray_noise_before_clap</code>).</p>
+
+<p><span class="func-name">extract_impulse_response(signal, sample_rate, threshold_db=20.0)</span></p>
+<p>Calls <code>find_onset()</code> then slices the signal from that point onward: <code>signal[onset_idx:]</code>. This trimmed signal is treated as an approximation of the room's impulse response for every downstream calculation.</p>
+
+<h4>Energy decay curve — Schroeder integration + Lundeby correction</h4>
+<p>Real recordings are too noisy and jagged to read a decay rate directly off the raw waveform envelope. In 1965, Manfred Schroeder proved that taking the impulse response's squared amplitude (energy) and integrating it backward — from the end of the recording toward the start — produces a smooth, statistically correct decay curve, since at each moment it represents the total remaining acoustic energy, which is exactly what "decay" physically means.</p>
+<div class="formula">EDC(t) = ∫ from t to ∞ of h²(τ) dτ          (Schroeder backward integral)
+decay_dB(t) = 10 · log10( EDC(t) / EDC(0) )  (normalized, converted to dB)</div>
+
+<p><span class="func-name">_raw_schroeder(energy, dt)</span></p>
+<p>The literal implementation of the formula above: reverses the energy array, runs <code>scipy.integrate.cumulative_trapezoid</code> (a running/cumulative integral), reverses the result back, normalizes to the peak (so it starts at 0 dB), clips tiny values to avoid <code>log(0)</code>, and converts to dB.</p>
+
+<p>Raw Schroeder integration has a known limitation: real recordings never decay to true silence — there is always a background noise floor. Since the integral sums all remaining energy including that noise, the tail of the curve flattens and bends upward instead of continuing to fall. This biases any RT60 estimate that touches the late part of the curve, making the room appear more reverberant than it actually is.</p>
+
+<p><span class="func-name">lundeby_correction(impulse_response, sampling_rate)</span> — the most significant function in the codebase.</p>
+<p>The ISO 3382-1 standard method for handling noisy, real-world (non-anechoic-chamber) recordings:</p>
+<ol>
+  <li>Splits the signal into 20 ms blocks, computes mean energy (dB) per block.</li>
+  <li>Estimates an initial noise floor from the quietest 10% of blocks (the tail end).</li>
+  <li>Fits a straight line (linear regression, <code>scipy.stats.linregress</code>) to the decay region between 5 dB below the peak and 10 dB above the estimated noise floor — i.e., only the "clean" part of the decay, avoiding both the very top (non-linear initial reflections) and the very bottom (noise).</li>
+  <li>Uses that fitted line to predict the crossing point — the time at which the decay line would intersect the noise floor.</li>
+  <li>Re-estimates the noise floor using only the blocks after that crossing point (a tighter, more localized estimate).</li>
+  <li>Repeats steps 3–5 up to 5 times until the crossing point stabilizes (converges to within 5 ms).</li>
+  <li>Subtracts the estimated noise-floor energy from the signal before doing the Schroeder integration, and analytically appends a "tail energy" term (from the fitted exponential decay beyond the crossing point) so the integral stays mathematically complete without being contaminated by measured noise.</li>
+  <li>Returns <code>(decay_db, t_cross, noise_floor_db)</code>.</li>
+</ol>
+<p>If anything goes wrong (too few samples, fewer than 5 valid blocks, a bad regression), it falls back to <code>_raw_schroeder()</code>.</p>
+
+<p><span class="func-name">energy_decay(impulse_response, sampling_rate, use_lundeby=True)</span></p>
+<p>The public-facing wrapper every route calls. Tries <code>lundeby_correction()</code> first (wrapped in try/except so any failure silently falls back to <code>_raw_schroeder()</code>), so the caller always gets some usable decay curve.</p>
+
+<div class="card"><strong>Note:</strong> Lundeby's method is the most sophisticated algorithm in the codebase — it is the same technique used by professional acoustic measurement software, not a simplified approximation of it.</div>
+
+<h4>RT60 estimation</h4>
+<p><span class="func-name">estimate_rt60(decay_db, time, db_start=-5.0, db_end=-25.0)</span></p>
+<p>RT60 is the time for sound energy to decay by 60 dB. Real recordings rarely have 60 dB of clean dynamic range above the noise floor, so rather than measuring the full 60 dB drop directly, the standard approach measures a smaller, cleaner segment and extrapolates:</p>
+<div class="formula">T20 (db_start=-5, db_end=-25):  measure the slope across a 20 dB span, then scale to 60 dB
+T30 (db_start=-5, db_end=-35):  measure the slope across a 30 dB span, then scale to 60 dB
+
+RT60 = -60 / slope        (slope is in dB/second, from linear regression)</div>
+<p>Finds the array indices closest to <code>db_start</code> and <code>db_end</code>, runs <code>scipy.stats.linregress</code> on that slice of the decay curve, and returns the RT60 seconds, the raw slope, intercept, and R² (r_squared) — the goodness-of-fit. A low R² indicates the decay wasn't cleanly linear over that range, usually meaning a bad recording or an unusual room. Raises <code>ValueError</code> if the fit isn't valid (e.g., a flat or increasing curve, or the requested dB range isn't spanned).</p>
+<p><code>app.py</code> calls this twice per analysis — once for T20, once for T30 — and returns both plus their R² values so reliability can be judged.</p>
+<p>Extrapolation is used instead of measuring the real 60 dB drop because background/electrical noise in a typical consumer mic recording sits well above where a true 60-dB-down signal would be. Extrapolating from a cleaner, higher-SNR portion of the decay (which is empirically linear in a diffuse sound field) avoids needing an impossibly quiet room.</p>
+
+<h4>Octave-band filtering</h4>
+<p>Reverberation time is not one single value for a room — bass and treble typically decay at very different rates depending on materials (soft furnishings absorb highs well but do almost nothing for bass). RT60 is therefore standardly reported per octave band.</p>
+
+<p><span class="func-name">octave_band(impulse_response, sample_rate, center_freq)</span></p>
+<p>For a given center frequency, computes the band edges as <code>fl = center/√2</code> and <code>fh = center·√2</code>, then calls <code>bandpass()</code>.</p>
+
+<p><span class="func-name">bandpass(data, edges, sample_rate, poles=5)</span></p>
+<p>Designs a 5th-order Butterworth bandpass filter (<code>scipy.signal.butter</code>, output as second-order sections — <code>sos</code> — for numerical stability) and applies it with <code>scipy.signal.sosfiltfilt</code> — zero-phase filtering: the filter runs forward, then backward, cancelling the phase delay/distortion a normal one-directional filter would introduce. This matters because a phase-shifted filter would smear the clap's sharp onset in time, corrupting every downstream timing-dependent measurement (onset detection, decay-curve timing). The tradeoff: <code>sosfiltfilt</code> needs the whole signal at once (non-causal), which is fine for offline analysis but would not work in a real-time system.</p>
+<p>Validates that the requested band edges are within <code>(0, Nyquist)</code> — otherwise raises <code>ValueError</code>.</p>
+
+<p><span class="func-name">all_octave_bands(impulse_response, sample_rate, bands=None)</span></p>
+<p>Loops over the 6 standard bands — <code>OCTAVE_BANDS = [125, 250, 500, 1000, 2000, 4000]</code> Hz — and runs <code>octave_band()</code> on each, skipping any band whose upper edge would exceed the Nyquist frequency (half the sample rate), since content above Nyquist cannot physically be filtered for (e.g. a 4000 Hz band on an 8kHz sample rate is silently dropped rather than crashing).</p>
+
+<h4>FFT (frequency spectrum)</h4>
+<p><span class="func-name">get_fft(signal, sample_rate)</span></p>
+<p>A direct call to <code>scipy.fft.fft</code> + <code>scipy.fft.fftfreq</code>, returning <code>(magnitude, frequencies)</code>. Because an FFT of a real-valued signal is symmetric, every caller takes only the first half of the array (<code>amp[:half]</code>) — the "negative frequency" mirror half is discarded as redundant. Used both for the raw <code>/fft</code> endpoint and internally by <code>calculate_room_modes()</code> to find actual resonant peaks.</p>
+
+<h4>Clarity &amp; Definition metrics</h4>
+<p><span class="func-name">clarity_index(impulse_response, sample_rate, time_ms)</span></p>
+<p>Computes C50 or C80 depending on <code>time_ms</code> (50 or 80):</p>
+<div class="formula">C = 10 · log10( E_early / E_late )   [dB]</div>
+<p>Splits the squared impulse response's energy at the cutoff sample, sums "early" energy (before cutoff) and "late" energy (after), and takes the log ratio. Positive = clear/direct sound dominates; negative = reverberant/blurred sound dominates. Raises <code>ValueError</code> if there's no late-arriving energy (a degenerate/too-short recording).</p>
+
+<p><span class="func-name">definition_index(impulse_response, sample_rate, time_ms=50.0)</span></p>
+<p>Computes D50 — the same early/late split, expressed as a percentage of total energy rather than a log ratio:</p>
+<div class="formula">D50 = (E_early / E_total) × 100   [%]</div>
+<p>The 50 ms window used for speech (C50/D50) versus the 80 ms window for music (C80) matches human perception: energy arriving within ~50 ms of the direct sound is perceptually fused with it and reinforces clarity for speech, while energy after that is perceived as blur/echo. Music (with slower transients and a desirable sense of "warmth"/envelopment from later reflections) tolerates a longer early window before it's perceived as blur.</p>
+
+<h4>Bass/Treble Ratio (tonal balance)</h4>
+<p><span class="func-name">bass_treble_ratio(rt60_by_band)</span></p>
+<p>Standard architectural-acoustics tonal-balance metrics (Bradley 1986 / Beranek), computed from the actually-measured per-band RT60 values rather than estimated multipliers:</p>
+<div class="formula">BR (Bass Ratio)   = (RT60_125 + RT60_250) / (RT60_500 + RT60_1000)
+TR (Treble Ratio) = (RT60_2000 + RT60_4000) / (RT60_500 + RT60_1000)</div>
+<ul>
+  <li><strong>BR &gt; 1</strong> → bass decays longer than mids → "warm"/bass-heavy room.</li>
+  <li><strong>BR &lt; 1</strong> → bass decays faster than mids → "thin"/bass-light room.</li>
+  <li>A commonly cited healthy range is roughly <strong>0.9–1.25</strong> for general rooms (concert halls skew slightly higher, ~1.1–1.25).</li>
+  <li><strong>TR &lt; 1</strong> is normal (highs absorbed faster than mids by furnishings/air); TR near/above 1 suggests an unusually bright/reflective room.</li>
+</ul>
+<p>Requires the 125/250/500/1000 Hz bands to compute BR (raises <code>ValueError</code> if any is missing); the 2000/4000 Hz bands are optional — if missing, <code>treble_ratio</code> is returned as <code>None</code> rather than failing the whole calculation.</p>
+
+<h4>Room modes (standing waves)</h4>
+<p>Below a certain frequency, sound in a room doesn't behave as an even, diffuse field — it behaves as standing waves between parallel surfaces, at frequencies fixed by the room's exact dimensions. This is why bass can sound "boomy" in one corner and "thin" a meter away.</p>
+<p>The Rayleigh equation for a rectangular room:</p>
+<div class="formula">f(nx, ny, nz) = (c/2) · √[ (nx/L)² + (ny/W)² + (nz/H)² ]</div>
+<p>where <code>c = 343 m/s</code> (speed of sound), <code>L, W, H</code> are room length/width/height, and <code>nx, ny, nz</code> are non-negative integers (not all zero) — the mode's "order" in each dimension.</p>
+
+<p><span class="func-name">calculate_room_modes(impulse_response, sample_rate, length_m=6.0, width_m=5.0, height_m=2.8, max_freq=300.0)</span></p>
+<ol>
+  <li>Computes room <code>volume = L × W × H</code>.</li>
+  <li>Runs the broadband decay/RT60 pipeline (falls back to a default 0.5 s if it fails) to get an RT60 value.</li>
+  <li>Computes the Schroeder cutoff frequency: <code>f_s = 2000 · √(RT60 / V)</code>.</li>
+  <li>Loops over all integer combinations of <code>(nx, ny, nz)</code> up to bounds computed from <code>max_freq</code>, computing each mode's frequency via the Rayleigh equation, keeping only modes below both <code>max_freq</code> (300 Hz, a practical audible cutoff) and the Schroeder frequency (above f_s, individual modes aren't meaningfully separate anymore).</li>
+  <li>Classifies each surviving mode by counting non-zero indices:
+    <ul>
+      <li><strong>1 non-zero → axial</strong> (reflects between 2 parallel walls — strongest, most audible, ~100% modal energy)</li>
+      <li><strong>2 non-zero → tangential</strong> (4 surfaces, ~50% energy)</li>
+      <li><strong>3 non-zero → oblique</strong> (all 6 surfaces, weakest, ~25% energy, decays fastest)</li>
+    </ul>
+  </li>
+  <li>Sorts modes by frequency.</li>
+  <li>Runs <code>get_fft()</code> on the impulse response, restricts to the 20–300 Hz range, normalizes amplitude, and uses <code>scipy.signal.find_peaks</code> to find actual resonant peaks in the measured spectrum.</li>
+  <li>Matches each measured peak to its nearest theoretical mode (only accepted if within 2.5 Hz) — turning the theoretical mode list into a set of modes confirmed to be physically present and audible in the actual room.</li>
+</ol>
+<p>Returns a dict with <code>schroeder_freq</code>, <code>rt60_seconds</code>, the full <code>modes</code> list, the FFT curve, and <code>matched_peaks</code>.</p>
+
+<h4>3D Waterfall (Cumulative Spectral Decay)</h4>
+<p>A single RT60 number — even 6 per-band numbers — still hides information. A waterfall (CSD) plot shows the full time evolution of decay across frequency simultaneously: one axis is time, one is frequency, one is level (dB). This is the classic tool acousticians use to spot a frequency that "rings on" far longer than its neighbors, visible as an isolated ridge that doesn't die down with the rest.</p>
+<p><span class="func-name">calculate_waterfall(impulse_response, sample_rate, target_points=50)</span></p>
+<ol>
+  <li>Runs <code>all_octave_bands()</code> to get the 6 filtered signals.</li>
+  <li>Picks a common time grid: <code>min(1.5 seconds, actual recording length)</code>, split into <code>target_points</code> (50) steps.</li>
+  <li>For each band: computes its <code>energy_decay()</code>, then interpolates (<code>np.interp</code>) that band's decay curve onto the shared time grid (so all 6 bands can be compared point-for-point on the same axis) and clips to <code>[-60, 0]</code> dB.</li>
+  <li>Returns the shared time axis plus a dict of <code>{band_frequency: [decay values...]}</code>.</li>
+</ol>
+<p>This feeds directly into <code>WaterfallPlot3D.jsx</code> on the frontend, which renders it as an interactive, orbit-controllable 3D surface.</p>
+
+<h3>4.3 <code>treatment.py</code></h3>
+<p>This module turns a measured RT60 into a concrete, materials-based treatment plan, using the classical Sabine equation (1898, Wallace Sabine):</p>
+<div class="formula">RT60 = 0.161 · V / A         ⟺         A = 0.161 · V / RT60</div>
+<p>where <code>V</code> = room volume (m³) and <code>A</code> = total absorption in sabins (metric sabins = m² of a perfectly absorptive surface). The constant <code>0.161</code> comes from the speed of sound and SI unit conversions.</p>
+
+<p><span class="func-name">load_acoustic_targets()</span> — loads and returns <code>acoustic_targets.json</code> (see §4.4) — the room-type RT60 targets and material absorption coefficients.</p>
+
+<p><span class="func-name">sabine_absorption(rt60_seconds, volume_m3)</span></p>
+<p>Direct implementation of <code>A = 0.161 · V / RT60</code>. Confirmed by test: <code>sabine_absorption(0.5, 100.0) == 0.161*100/0.5</code>. Rejects non-positive RT60 or volume (<code>ValueError</code>) — physically, both must be positive. A longer RT60 (more "live" room) implies less absorption, which the tests explicitly confirm.</p>
+
+<p><span class="func-name">absorption_deficit(measured_rt60_seconds, target_rt60_seconds, volume_m3)</span></p>
+<p>Computes how much more absorption a room needs to hit its target:</p>
+<div class="formula">deficit = A_needed_for_target − A_currently_present</div>
+<ul>
+  <li><strong>Positive</strong> deficit → room is too reverberant, needs more absorption.</li>
+  <li><strong>Negative</strong> deficit → room already meets or beats the target.</li>
+  <li><strong>Zero</strong> → exactly at target.</li>
+</ul>
+
+<p><span class="func-name">recommend_material_area(deficit_sabins, material, targets, center_freq)</span></p>
+<p>Converts an absorption deficit (in sabins) into a physical area (m²) of a specific material:</p>
+<div class="formula">area = deficit_sabins / absorption_coefficient(material, center_freq)</div>
+<ul>
+  <li>If the deficit is ≤ 0, returns <code>0.0</code> (no treatment needed).</li>
+  <li>A material with a higher absorption coefficient at that frequency needs less area to close the same deficit (e.g. <code>acoustic_panel</code> at 1000 Hz needs less area than at 125 Hz, because it's far less absorptive at 125 Hz — 0.15 vs. 0.90 — this is why bass is harder to treat than treble, and why dedicated bass traps exist).</li>
+  <li>Raises <code>ValueError</code> for an unknown material name or an unknown octave band.</li>
+</ul>
+
+<p><span class="func-name">recommend_treatment(measured_rt60_by_band, volume_m3, room_type, targets, material="acoustic_panel")</span></p>
+<p>The end-to-end orchestrator called by the <code>/treatment</code> route: looks up the target RT60 for <code>room_type</code>, then for each measured octave band computes <code>absorption_deficit()</code> against that target and <code>recommend_material_area()</code> for the chosen material, returning a <code>bands</code> dict with one entry per band.</p>
+
+<p><span class="func-name">room_surface_area(length_m, width_m, height_m, volume_m3)</span></p>
+<p>If full dimensions are available, computes the true surface area <code>2·(L·W + L·H + W·H)</code>. If only a bare volume was submitted, falls back to estimating a cube-shaped room of that volume — flagged in the return value as <code>estimated: True</code>.</p>
+
+<p><span class="func-name">compare_absorption_models(rt60, volume_m3, surface_area_m2)</span></p>
+<p>Compares the Sabine-equation absorption estimate against an Eyring-equation estimate (<code>RT60 = 0.161·V / (−S·ln(1−ᾱ))</code>) for the same room — Eyring is generally considered more accurate for rooms with high average absorption, where Sabine is known to be less accurate.</p>
+
+<div class="flag"><strong>Documentation note:</strong> only <code>sabine_absorption()</code> drives the actual treatment recommendation math; Eyring only appears as a secondary comparison metric (<code>compare_absorption_models</code>) in the <code>/treatment</code> response.</div>
+
+<h3>4.4 <code>acoustic_targets.json</code> — the standards-referenced config file</h3>
+<p>A data file, not code — it's what makes the treatment recommendations trustworthy rather than arbitrary. Two top-level sections:</p>
+<p><strong><code>room_types</code></strong> — 9 room categories, each with a <code>target_rt60_seconds</code>, an <code>acceptable_range_seconds</code>, and a <code>source</code> citation. Example: <strong>classroom</strong> targets <strong>0.6 s</strong>, sourced from <strong>ANSI/ASA S12.60-2010</strong> — the US school-acoustics design standard.</p>
+<p><strong><code>materials</code></strong> — 4 materials (<code>acoustic_panel</code>, <code>bass_trap</code>, <code>heavy_curtain</code>, <code>carpet_rug</code>), each with a per-octave-band absorption coefficient, sourced from a published ASTM C423 reverberation-room-method test-data table.</p>
+<p><code>bass_trap</code> has a much higher 125 Hz coefficient (0.35) than <code>acoustic_panel</code> (0.15) — the physical reason bass traps are a distinct, thicker product: low frequencies are inherently harder to absorb.</p>
+
+<h3>4.5 <code>app.py</code> — the Flask routes</h3>
+<p>Every route follows the same shape: parse the uploaded audio → run DSP functions → catch <code>AudioLoadError</code> (→ HTTP 400, bad input) and <code>ValueError</code> (→ HTTP 422, the math couldn't produce a valid result) → return JSON.</p>
+<ul>
+  <li><strong><code>get_uploaded_audio()</code></strong> — shared helper: pulls the <code>audio</code> field out of <code>request.files</code>, validates a file was attached, calls <code>load_audio()</code>.</li>
+  <li><strong><code>/upload</code></strong> — returns the waveform for the UI to draw. No acoustic analysis yet.</li>
+  <li><strong><code>/energydecay</code></strong> — runs onset extraction + <code>energy_decay()</code>.</li>
+  <li><strong><code>/octavebands</code></strong> — extracts impulse response, filters into all 6 bands, computes a decay curve per band (silently skips a band if its RT60 fit fails).</li>
+  <li><strong><code>/fft</code></strong> — runs <code>get_fft()</code> on the raw signal (not onset-trimmed — a full spectrum view doesn't need onset alignment).</li>
+  <li><strong><code>/RT60</code></strong> — the headline endpoint: fits both T20 and T30, returns both plus R² values and a <code>lundeby_corrected: True</code> flag.</li>
+  <li><strong><code>/clarity</code></strong> — computes C50, C80, D50.</li>
+  <li><strong><code>/treatment</code></strong> — the biggest route: parses volume/room type, computes per-band T20 RT60, bass/treble ratio, surface area + Sabine-vs-Eyring comparison, broadband decay/RT60/clarity for the summary chart, and finally calls <code>recommend_treatment()</code> for the area-needed numbers. Merges everything into one JSON payload.</li>
+  <li><strong><code>/roommodes</code></strong> — parses dimensions, calls <code>calculate_room_modes()</code>.</li>
+  <li><strong><code>/waterfall</code></strong> — calls <code>calculate_waterfall()</code>.</li>
+</ul>
+<p><strong>CORS</strong> is configured (<code>flask_cors</code>) to allow the Vercel-deployed frontend (plus local dev ports) to call this API cross-origin, since frontend and backend are two separate deployed services.</p>
+
+<h2 id="frontend">5 — Frontend</h2>
+<p>React 19 + Vite, deployed on Vercel, using <code>react-router-dom</code> for two pages (<code>App.jsx</code>): <code>/</code> (landing) and <code>/generator</code> (the actual tool; <code>/analyzer</code> aliases to the same page).</p>
+
+<h3>5.1 Landing page</h3>
+<p>Pure marketing/explainer content — no DSP happens here. Renders <code>Navbar</code>, <code>HeroSection</code>, <code>SpaceShowcase</code>, <code>WhatWeDoSection</code>, <code>CounselorSection</code>, <code>Footer</code>, plus educational modals for a general audience:</p>
+<ul>
+  <li><code>RT60InfoModal.jsx</code> — RT60 basics, Sabine equation, target RT60s by room type.</li>
+  <li><code>SchroederModal.jsx</code> — Schroeder integration formula, T20 vs T30, R² quality bands.</li>
+  <li><code>ISO3382Modal.jsx</code> — the ISO 3382 standard itself, a parameter glossary table.</li>
+  <li><code>RoomModesModal.jsx</code> — the Rayleigh formula, axial/tangential/oblique, Schroeder cutoff.</li>
+  <li>Business/contact-form modals (<code>AcousticConsultingModal</code>, <code>StudioCinemaModal</code>, <code>ArchitecturalModal</code>, <code>ContactModal</code>) — lead-capture forms with no backend wiring.</li>
+  <li><code>AboutModal.jsx</code> — team credits and mission statement.</li>
+</ul>
+
+<h3>5.2 <code>GeneratorPage.jsx</code> — the analysis tool</h3>
+<p>The largest file in the project. High-level flow:</p>
+<ol>
+  <li><strong>Room type selection</strong> — 9 room types, or "all" for a comparative Do-It-All mode.</li>
+  <li><strong>Room guidance screen</strong> — purpose/focus/requirements/recommendations before proceeding.</li>
+  <li><strong>Workspace</strong>: room dimension inputs, material selector, and audio input — either a file-upload dropzone or a live mic recorder built with <code>MediaRecorder</code>. Recorded audio is decoded via <code>AudioContext.decodeAudioData</code> and re-encoded to proper 44.1kHz 16-bit PCM WAV client-side (<code>encodeWav()</code>) before upload.</li>
+  <li>A "Client-Side DSP Simulation Mode" toggle — when enabled (or if the real backend call fails), the frontend fabricates plausible-looking results locally so the UI can still be demoed offline. This is a UX fallback for offline demos, not a real analysis.</li>
+  <li><code>runAnalysis()</code> — calls <code>/treatment</code>, then (if a file is attached) <code>/roommodes</code> and <code>/waterfall</code>, normalized via <code>formatBackendResults()</code>.</li>
+  <li><strong>Results tabs</strong>: treatment, room modes, waterfall, clarity, and an "all spaces" comparative matrix.</li>
+  <li><strong>Report tools</strong>: save to <code>localStorage</code> (capped at 3), export JSON, copy summary, and Print/Save as PDF (via a hidden print-only <code>AcousticPrintReport.jsx</code> shown only under <code>@media print</code>).</li>
+</ol>
+
+<h3>5.3 <code>WaterfallPlot3D.jsx</code> — the 3D visualization</h3>
+<p>Renders the waterfall data as a hand-rolled 3D engine in pure SVG — no Three.js or WebGL. Key ideas:</p>
+<ul>
+  <li><code>project(wx, wy, wz)</code> implements a manual orthographic 3D-to-2D projection: center the point, rotate around Y (azimuth/orbit), rotate around X (elevation/tilt), then use <code>(x, y)</code> as screen coordinates while keeping <code>z</code> (depth) for sorting.</li>
+  <li>Mouse/touch drag handlers update <code>azimuth</code>/<code>elevation</code> state, re-running the projection — this is how "orbit to rotate" works with plain SVG.</li>
+  <li>Bands are depth-sorted before rendering, painting farthest-first (a manual painter's algorithm).</li>
+  <li>Two render modes: <strong>Ribbons</strong> (filled gradient curtains) and <strong>Wireframe</strong> (glowing ridge lines + cross-rib mesh).</li>
+</ul>
+
+<h3>5.4 Other notable components</h3>
+<ul>
+  <li><code>AcousticPrintReport.jsx</code> — the print-only formal report layout.</li>
+  <li><code>SavedReportsModal.jsx</code> — browses/restores/deletes the up-to-3 <code>localStorage</code>-persisted calculations.</li>
+  <li><code>AnalyzerModal.jsx</code> — an earlier/alternate modal-based version of the same analysis workflow.</li>
+</ul>
+
+<h2 id="glossary">6 — Glossary</h2>
+<div class="overflow-x">
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td><strong>RT60</strong></td><td>Time for sound energy in a room to decay by 60 dB after the source stops</td></tr>
+<tr><td><strong>T20 / T30</strong></td><td>RT60 estimated by extrapolating a 20 dB / 30 dB decay segment up to 60 dB</td></tr>
+<tr><td><strong>Impulse response</strong></td><td>A room's acoustic "fingerprint" — its output when excited by a very short, sharp sound</td></tr>
+<tr><td><strong>Schroeder (backward) integration</strong></td><td>Reverse-time cumulative integral of squared impulse response → smooth decay curve</td></tr>
+<tr><td><strong>Lundeby's method</strong></td><td>ISO-standard iterative noise-floor estimation &amp; correction, applied before Schroeder integration</td></tr>
+<tr><td><strong>Noise floor</strong></td><td>The background/ambient noise level a recording never decays below</td></tr>
+<tr><td><strong>Octave band</strong></td><td>A frequency band from center/√2 to center·√2</td></tr>
+<tr><td><strong>Nyquist frequency</strong></td><td>Half the sample rate — the highest frequency a digital signal can represent</td></tr>
+<tr><td><strong>Butterworth filter</strong></td><td>A filter type chosen for a maximally flat frequency response in its passband</td></tr>
+<tr><td><strong>Zero-phase filtering</strong></td><td>Filtering forward then backward to cancel phase delay/time-smearing</td></tr>
+<tr><td><strong>Room mode</strong></td><td>A standing-wave resonance formed between reflective parallel surfaces at specific frequencies</td></tr>
+<tr><td><strong>Axial / Tangential / Oblique</strong></td><td>Mode types by how many surfaces (2 / 4 / 6) they involve, and how strong they are</td></tr>
+<tr><td><strong>Schroeder frequency (f_s)</strong></td><td>Cutoff above which individual room modes overlap into a statistically diffuse field</td></tr>
+<tr><td><strong>FFT</strong></td><td>Fast Fourier Transform — converts a time-domain signal into its frequency-domain magnitude spectrum</td></tr>
+<tr><td><strong>C50 / C80</strong></td><td>Early-to-late energy ratio (dB), 50ms cutoff for speech / 80ms cutoff for music — "clarity"</td></tr>
+<tr><td><strong>D50 (Definition)</strong></td><td>Early energy as a percent of total energy — a speech-intelligibility metric</td></tr>
+<tr><td><strong>Sabine equation</strong></td><td>RT60 = 0.161·V/A — links reverberation time, room volume, and total absorption</td></tr>
+<tr><td><strong>Sabin</strong></td><td>Unit of absorption; 1 sabin = 1 m² of a perfectly absorptive ("open window") surface</td></tr>
+<tr><td><strong>Absorption coefficient (α)</strong></td><td>0–1 value describing what fraction of sound energy a material absorbs at a given frequency</td></tr>
+<tr><td><strong>Eyring equation</strong></td><td>An alternative to Sabine, generally more accurate for highly absorptive rooms</td></tr>
+<tr><td><strong>Bass Ratio / Treble Ratio</strong></td><td>Ratios comparing low-band or high-band RT60 to mid-band RT60 — describes tonal "warmth"/"brightness"</td></tr>
+<tr><td><strong>ISO 3382-1</strong></td><td>The international standard defining how room acoustic parameters are measured and reported</td></tr>
+<tr><td><strong>ANSI/ASA S12.60</strong></td><td>The US standard setting maximum permissible classroom RT60 for speech intelligibility</td></tr>
+<tr><td><strong>R² (r-squared)</strong></td><td>Regression fit quality (0–1); how well the decay curve follows a straight line over the fitted range</td></tr>
+<tr><td><strong>Diffuse field</strong></td><td>An idealized sound field where energy is statistically even in all directions</td></tr>
+<tr><td><strong>MediaRecorder API</strong></td><td>Browser API used to record live microphone audio (outputs WebM/Opus by default)</td></tr>
+</table>
+</div>
+
+<h2 id="formulas">7 — Formula Reference</h2>
+<div class="formula">Schroeder decay:        EDC(t) = ∫[t,∞] h²(τ) dτ         decay_dB = 10·log10(EDC(t)/EDC(0))
+RT60 from slope:        RT60 = -60 / slope
+Octave band edges:      f_low = f_center/√2      f_high = f_center·√2
+Room mode frequency:    f(nx,ny,nz) = (c/2)·√[(nx/L)² + (ny/W)² + (nz/H)²]      c = 343 m/s
+Schroeder frequency:    f_s = 2000 · √(RT60 / V)
+Clarity (C50/C80):      C = 10·log10(E_early / E_late)          [dB]
+Definition (D50):       D50 = (E_early / E_total) × 100          [%]
+Sabine equation:        RT60 = 0.161·V / A        ⟺        A = 0.161·V / RT60
+Bass Ratio:             BR = (RT60_125 + RT60_250) / (RT60_500 + RT60_1000)
+Treble Ratio:           TR = (RT60_2000 + RT60_4000) / (RT60_500 + RT60_1000)</div>
+
+<hr>
+<footer>RESONA — Room Acoustics &amp; RT60 Analyzer</footer>
+
+</div>
+</body>
+</html>

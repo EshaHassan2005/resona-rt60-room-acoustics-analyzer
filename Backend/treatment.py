@@ -91,9 +91,7 @@ def compare_absorption_models(rt60_seconds: float, volume_m3: float, surface_are
     """
     Compares Sabine's and Eyring's average-absorption-coefficient estimate
     for the *same* measured RT60, and flags whether Sabine's simpler
-    (linear) approximation is reliable for this room. This is the piece
-    that actually backs up the "Sabine & Eyring" claim made elsewhere in
-    the app - previously only Sabine was implemented anywhere in the code.
+    (linear) approximation is reliable for this room.
     """
     a_sabine = sabine_absorption(rt60_seconds, volume_m3)
     alpha_sabine = min(a_sabine / surface_area_m2, 1.0)

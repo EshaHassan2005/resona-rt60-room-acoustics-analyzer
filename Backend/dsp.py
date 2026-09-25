@@ -293,34 +293,6 @@ def estimate_rt60(decay_db: np.ndarray, time: np.ndarray, db_start: float=-5.0, 
     }
 
 def bass_treble_ratio(rt60_by_band: dict) -> dict:
-    """
-    Bass Ratio (BR) and Treble Ratio (TR) - standard architectural-acoustics
-    tonal-balance metrics (Bradley 1986 / Beranek), computed from *measured*
-    per-octave-band RT60 values (not estimated multipliers).
-
-        BR = (RT60_125 + RT60_250) / (RT60_500 + RT60_1000)
-        TR = (RT60_2000 + RT60_4000) / (RT60_500 + RT60_1000)
-
-    BR > 1   -> bass decays longer than mids ("warm" / bass-heavy room).
-    BR < 1   -> bass decays faster than mids ("thin" / bass-light room).
-    A commonly cited healthy range for BR is roughly 0.9-1.25 for
-    general-purpose rooms (Beranek's guidance for concert halls skews
-    slightly higher, ~1.1-1.25).
-
-    TR follows the same idea for the high end: TR < 1 usually indicates a
-    normal room (highs absorbed faster than mids by furnishings/air), while
-    TR close to or above 1 suggests an unusually bright/reflective room.
-
-    rt60_by_band must be keyed by band center frequency as a string, e.g.
-    {"125": 0.61, "250": 0.55, "500": 0.52, "1000": 0.48, "2000": 0.4, "4000": 0.33}
-    (this is exactly the shape of `measured_rt60_by_band` already built in
-    app.py's /treatment route).
-
-    Raises ValueError if the 125/250/500/1000 Hz bands aren't all present -
-    those four are required for BR. The 2000/4000 Hz bands are optional;
-    if either is missing, "treble_ratio" is returned as None rather than
-    raising, since BR alone is still useful without TR.
-    """
     required = ["125", "250", "500", "1000"]
     missing = [b for b in required if b not in rt60_by_band]
     if missing:
